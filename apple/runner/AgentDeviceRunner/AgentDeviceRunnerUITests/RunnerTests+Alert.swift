@@ -140,6 +140,14 @@ extension RunnerTests {
         guard !frame.isEmpty else { return }
 #endif
 #if os(iOS)
+        let postEventWaitSelector = NSSelectorFromString("_waitForQuiescenceAsPreEvent:")
+        guard alert.ownerApp.responds(to: postEventWaitSelector) else {
+          outcome = .unsupported(
+            message: "alert activation could not wait for post-event quiescence",
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
+          return
+        }
         guard let context = synthesizedCoordinateContext(
           app: alert.ownerApp,
           policy: synthesizedGesturePolicy(.coordinateTap)
@@ -167,6 +175,12 @@ extension RunnerTests {
         )
         switch status {
         case .succeeded:
+          typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
+          let waitForQuiescence = unsafeBitCast(
+            alert.ownerApp.method(for: postEventWaitSelector),
+            to: WaitForQuiescence.self
+          )
+          waitForQuiescence(alert.ownerApp, postEventWaitSelector, false)
           outcome = .performed
         case .deadlineExceeded:
           outcome = nil
