@@ -236,7 +236,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-appium-version <version>',
     usageDescription:
-      'Hosted cloud provider Appium server version, for example 3.2.0. Without it BrowserStack falls back to its default (Appium 1.x)',
+      'Hosted cloud provider Appium server version, for example 3.2.0. Without it each provider starts its own default (Appium 1.x on BrowserStack)',
     projectConfig: false,
     recorded: false,
   },

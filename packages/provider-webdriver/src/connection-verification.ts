@@ -15,20 +15,32 @@ export type CloudWebDriverConnectionVerification =
       provider: 'aws-device-farm';
       service: 'AWS Device Farm';
       project: { name?: string; reference: string };
+    })
+  | (ProviderConnectionVerification & {
+      provider: 'testmu';
+      service: 'TestMu AI';
+      project?: never;
     });
 
+/** Credentials plus the exact device, OS, and app a hosted Appium hub session is created with. */
+type HubSelectionVerificationOptions = {
+  username: string;
+  accessKey: string;
+  platform: 'android' | 'ios';
+  deviceName: string;
+  osVersion: string;
+  app: string;
+  devicesEndpoint?: string | URL;
+  appsEndpoint?: string | URL;
+};
+
 export type CloudWebDriverConnectionVerificationOptions =
-  | {
-      provider: 'browserstack';
-      username: string;
-      accessKey: string;
-      platform: 'android' | 'ios';
-      deviceName: string;
-      osVersion: string;
-      app: string;
-      devicesEndpoint?: string | URL;
-      appsEndpoint?: string | URL;
-    }
+  | (HubSelectionVerificationOptions & { provider: 'browserstack' })
+  | (HubSelectionVerificationOptions & {
+      provider: 'testmu';
+      /** Base of the catalog API, as `TESTMU_API_ENDPOINT` sets it for the runtime. */
+      apiEndpoint?: string | URL;
+    })
   | {
       provider: 'aws-device-farm';
       platform: 'android' | 'ios';
@@ -42,7 +54,15 @@ export async function verifyCloudWebDriverConnection(
   options: CloudWebDriverConnectionVerificationOptions,
   dependencies: ProviderWebDriverDependencies,
 ): Promise<CloudWebDriverConnectionVerification> {
-  return options.provider === 'browserstack'
-    ? await verifyBrowserStackConnection(options, dependencies.clientVersion)
-    : await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  switch (options.provider) {
+    case 'browserstack':
+      return await verifyBrowserStackConnection(options, dependencies.clientVersion);
+    case 'testmu': {
+      // Loaded on demand: the package entry must not grow its eager closure for a new vendor.
+      const { verifyTestMuConnection } = await import('./testmu-connection-verification.ts');
+      return await verifyTestMuConnection(options, dependencies.clientVersion);
+    }
+    case 'aws-device-farm':
+      return await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  }
 }
