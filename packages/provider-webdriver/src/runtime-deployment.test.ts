@@ -125,6 +125,36 @@ test('a hosted upload sends the file the materializer names, else the installabl
   expect(installApp).toHaveBeenNthCalledWith(1, 'lt://1', expect.any(AbortSignal));
 });
 
+test('a hosted upload refuses a directory typed instead of reading it', async () => {
+  const tempDir = await mkdtempForTest('agent-device-materialized-directory-');
+  try {
+    const installablePath = path.join(tempDir, 'extracted', 'App.app');
+    await fs.mkdir(installablePath, { recursive: true });
+    const uploadApp = vi.fn<CloudWebDriverUploadApp>();
+    const installApp = vi.fn(async () => undefined);
+    const deployment = createWebDriverDeploymentRuntime({
+      provider: 'browserstack',
+      uploadApp,
+      findSessionForDevice: () => activeSession(installApp),
+    });
+
+    await expect(
+      deployment.deployMaterializedApp(
+        iosDevice,
+        { artifact: { installablePath, cleanup: async () => {} } },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      message: `browserstack can only upload an app file, not a directory: ${installablePath}`,
+    });
+    expect(uploadApp).not.toHaveBeenCalled();
+    expect(installApp).not.toHaveBeenCalled();
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('a provider without an uploader still installs the materialized bundle path', async () => {
   const installApp = vi.fn(async () => undefined);
   const deployment = createWebDriverDeploymentRuntime({
