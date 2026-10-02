@@ -150,6 +150,106 @@ export async function resolveHubAppReference(options: {
   return await options.uploadFile(appPath, options.signal);
 }
 
+const PROVIDER_API_TIMEOUT_MS = 15_000;
+
+/** Service name and remediation hints a verification failure carries. */
+type ProviderJsonFailureHints = {
+  service: string;
+  unauthorizedHint: string;
+  networkHint: string;
+};
+
+/**
+ * Fetches JSON from a hosted provider's API during connection verification. A 401/403 is
+ * `UNAUTHORIZED` with a credential hint, any other non-2xx is `COMMAND_FAILED`, and a transport
+ * failure is wrapped so its cause survives without leaking the credentials.
+ */
+export async function fetchProviderVerificationJson(
+  endpoint: string | URL,
+  options: {
+    clientVersion: string;
+    auth: { username: string; accessKey: string };
+    hints: ProviderJsonFailureHints;
+  },
+): Promise<unknown> {
+  const { service, unauthorizedHint, networkHint } = options.hints;
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        ...agentDeviceRequestHeaders(options.clientVersion),
+        Authorization: basicAuthHeader(options.auth),
+      },
+      signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const unauthorized = response.status === 401 || response.status === 403;
+      throw new AppError(
+        unauthorized ? 'UNAUTHORIZED' : 'COMMAND_FAILED',
+        `${service} rejected connection verification.`,
+        {
+          status: response.status,
+          hint: unauthorized
+            ? unauthorizedHint
+            : `Retry connect or check the ${service} service status.`,
+        },
+      );
+    }
+    return (await response.json()) as unknown;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `${service} connection verification failed.`,
+      { hint: networkHint },
+      error,
+    );
+  }
+}
+
+/**
+ * Fetches a provider's session-details JSON with basic auth under a deadline. A transport failure,
+ * a non-2xx answer, or a body that is not a JSON object is `COMMAND_FAILED`.
+ */
+export async function fetchProviderSessionDetails(
+  endpoint: string | URL,
+  options: {
+    clientVersion: string;
+    auth: { username: string; accessKey: string };
+    service: string;
+  },
+): Promise<Record<string, unknown>> {
+  let response: Response;
+  let json: unknown;
+  try {
+    response = await fetch(endpoint, {
+      headers: {
+        ...agentDeviceRequestHeaders(options.clientVersion),
+        Authorization: basicAuthHeader(options.auth),
+      },
+      signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
+    });
+    json = await readProviderJsonBody(response);
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `${options.service} session details lookup failed.`,
+      { hint: `Check network access to the ${options.service} API, then retry.` },
+      error,
+    );
+  }
+  const details =
+    json && typeof json === 'object' && !Array.isArray(json)
+      ? (json as Record<string, unknown>)
+      : undefined;
+  if (!response.ok || !details) {
+    throw new AppError('COMMAND_FAILED', `${options.service} session details lookup failed.`, {
+      status: response.status,
+      response: json,
+    });
+  }
+  return details;
+}
+
 /** A provider response body parsed as JSON, or `undefined` when it is empty or not JSON (a gateway error page). */
 async function readProviderJsonBody(response: Response): Promise<unknown> {
   const text = await response.text();
@@ -159,6 +259,12 @@ async function readProviderJsonBody(response: Response): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+/** `1.0` and `1` name the same OS release on BrowserStack's catalog. */
+export function sameOsVersion(left: string, right: string): boolean {
+  const normalize = (value: string) => value.replace(/(?:\.0)+$/, '');
+  return normalize(left) === normalize(right);
 }
 
 /** Validates a device-orientation flag against the shared enum before it reaches a hub that would ignore it. */
