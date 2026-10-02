@@ -106,6 +106,32 @@ test('BrowserStack passes bs:// ids and URLs to the hub and uploads only local p
   }
 });
 
+test('BrowserStack refuses a directory typed before any upload request on every route', async () => {
+  const tempDir = await mkdtempForTest('agent-device-browserstack-directory-');
+  const bundlePath = path.join(tempDir, 'App.app');
+  try {
+    await fs.mkdir(bundlePath);
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
+    const refusedTyped = (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.message, `BrowserStack can only upload a regular app file: ${bundlePath}`);
+      assert.equal(error.details?.provider, 'browserstack');
+      return true;
+    };
+
+    await assert.rejects(uploadBrowserStackApp(bundlePath, upload), refusedTyped);
+    await assert.rejects(
+      resolveBrowserStackAppReference('App.app', { ...upload, cwd: tempDir }),
+      refusedTyped,
+    );
+    assert.equal(fetchSpy.mock.calls.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('BrowserStack session details lookup has a deadline and fails typed', async () => {
   const lookup = async () =>
     await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', upload);

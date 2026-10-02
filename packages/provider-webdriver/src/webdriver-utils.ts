@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   DeviceLease,
@@ -65,8 +65,28 @@ export function withTrailingSlash(url: URL): URL {
 
 type HubCredentials = { username: string; accessKey: string };
 
-/** A multipart form carrying the local app file under the hub's field name. */
-export async function appFileUploadForm(appPath: string, fileField: string): Promise<FormData> {
+/**
+ * A multipart form carrying the local app file under the hub's field name. Upload APIs take one
+ * regular file, so anything else (an extracted `.app` directory, a missing path) is refused here,
+ * before any request.
+ */
+export async function appFileUploadForm(
+  appPath: string,
+  fileField: string,
+  hub: { provider: string; service: string },
+): Promise<FormData> {
+  const entry = await stat(appPath).catch(() => undefined);
+  if (!entry?.isFile()) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${hub.service} can only upload a regular app file: ${appPath}`,
+      {
+        provider: hub.provider,
+        appPath,
+        hint: 'Use an existing .ipa, .apk, or .aab file, or a .zip of the iOS simulator .app bundle.',
+      },
+    );
+  }
   const form = new FormData();
   form.set(fileField, new Blob([await readFile(appPath)]), path.basename(appPath));
   return form;

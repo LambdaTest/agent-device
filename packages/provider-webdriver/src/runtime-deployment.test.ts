@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createBrowserStackUploadApp } from './browserstack.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { createWebDriverDeploymentRuntime } from './runtime-deployment.ts';
 import type { WebDriverProviderSession } from './runtime-session.ts';
@@ -18,6 +19,11 @@ const device: DeviceInfo = {
 };
 
 const iosDevice: DeviceInfo = { ...device, platform: 'apple', id: 'webdriver:ios' };
+const realFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 test('keeps a stale WebDriver owner unavailable before any deployment attempt', () => {
   const deployment = createWebDriverDeploymentRuntime({
@@ -117,6 +123,43 @@ test('a hosted upload sends the file the materializer names, else the installabl
   expect(uploaded).toEqual(['/m/App.app.zip', '/m/x/App.ipa', '/m/x/App.app', '/m/x/app.apk']);
   expect(result).toEqual({ bundleId: 'com.example.app', launchTarget: 'com.example.app' });
   expect(installApp).toHaveBeenNthCalledWith(1, 'hub://1', expect.any(AbortSignal));
+});
+
+test('a hosted upload refuses a directory typed before any upload request', async () => {
+  const tempDir = await mkdtempForTest('agent-device-materialized-directory-');
+  try {
+    const installablePath = path.join(tempDir, 'extracted', 'App.app');
+    await fs.mkdir(installablePath, { recursive: true });
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
+    const installApp = vi.fn(async () => undefined);
+    const deployment = createWebDriverDeploymentRuntime({
+      provider: 'browserstack',
+      uploadApp: createBrowserStackUploadApp({
+        clientVersion: '0.0.0-test',
+        username: 'user',
+        accessKey: 'key',
+        endpoint: 'https://upload.example.test/app',
+      }),
+      findSessionForDevice: () => activeSession(installApp),
+    });
+
+    await expect(
+      deployment.deployMaterializedApp(
+        iosDevice,
+        { artifact: { installablePath, cleanup: async () => {} } },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ARGS',
+      message: `BrowserStack can only upload a regular app file: ${installablePath}`,
+      details: expect.objectContaining({ provider: 'browserstack' }),
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(installApp).not.toHaveBeenCalled();
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('a provider without an uploader still installs the materialized bundle path', async () => {

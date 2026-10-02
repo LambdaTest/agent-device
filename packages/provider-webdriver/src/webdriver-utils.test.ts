@@ -5,6 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { asOptionalRecord } from '@agent-device/kernel/record';
 import {
+  appFileUploadForm,
   createHubUploadApp,
   postHubAppUpload,
   resolveHubAppReference,
@@ -116,6 +117,35 @@ test('the hub app resolver passes references through, uploads local files, and p
       );
       return true;
     });
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('appFileUploadForm carries a regular app file and refuses anything else typed', async () => {
+  const tempDir = await mkdtempForTest('agent-device-upload-form-');
+  try {
+    const appPath = path.join(tempDir, 'App.ipa');
+    const bundlePath = path.join(tempDir, 'App.app');
+    const missingPath = path.join(tempDir, 'Missing.ipa');
+    await fs.writeFile(appPath, 'ipa bytes');
+    await fs.mkdir(bundlePath);
+    const hub = { provider: 'hub', service: 'Hub' };
+
+    const file = (await appFileUploadForm(appPath, 'file', hub)).get('file') as File;
+    assert.equal(file.name, 'App.ipa');
+    assert.equal(await file.text(), 'ipa bytes');
+
+    for (const refusedPath of [bundlePath, missingPath]) {
+      await assert.rejects(appFileUploadForm(refusedPath, 'file', hub), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.message, `Hub can only upload a regular app file: ${refusedPath}`);
+        assert.equal(error.details?.provider, 'hub');
+        assert.equal(error.details?.appPath, refusedPath);
+        return true;
+      });
+    }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }

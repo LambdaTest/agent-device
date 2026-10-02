@@ -1,6 +1,7 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
   appFileUploadForm,
@@ -80,7 +81,10 @@ export async function uploadBrowserStackApp(
 ): Promise<string> {
   signal?.throwIfAborted();
   return await postHubAppUpload(
-    await appFileUploadForm(appPath, 'file'),
+    await appFileUploadForm(appPath, 'file', {
+      provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      service: 'BrowserStack',
+    }),
     {
       service: 'BrowserStack',
       endpoint: options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
