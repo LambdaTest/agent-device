@@ -102,21 +102,28 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
     });
 
   try {
-    assert.equal(
-      readGeneratedConfig(connect('testmu', 'LT://APP1').remoteConfigPath).providerApp,
-      'lt://APP1',
-    );
+    const upperCase = connect('testmu', 'LT://APP1');
+    assert.equal(readGeneratedConfig(upperCase.remoteConfigPath).providerApp, 'lt://APP1');
+    // Connect verification reads these flags, so they must carry the canonical reference too.
+    assert.equal(upperCase.flags.providerApp, 'lt://APP1');
     assert.equal(
       readGeneratedConfig(connect('browserstack', 'Bs://abc').remoteConfigPath).providerApp,
       'bs://abc',
     );
-    assert.throws(
-      () => connect('testmu', 'lt://'),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'INVALID_ARGS' &&
-        /--provider-app lt:\/\/ has no app id/.test(error.message),
-    );
+    for (const [provider, app] of [
+      ['testmu', 'lt://'],
+      ['testmu', 'lt://a b'],
+      ['testmu', 'LT://a/b'],
+      ['browserstack', 'bs://'],
+    ] as const) {
+      assert.throws(
+        () => connect(provider, app),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          error.message.includes(`--provider-app ${app} is not a valid`),
+      );
+    }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

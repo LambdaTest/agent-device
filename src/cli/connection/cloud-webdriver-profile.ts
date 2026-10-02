@@ -4,6 +4,10 @@ import {
   readAwsDeviceFarmRegionFromArn,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
+import {
+  isBrowserStackAppReference,
+  isTestMuAppReference,
+} from '@agent-device/provider-webdriver/providers';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -55,6 +59,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
+    // Verification reads these flags; it must see the canonical reference the profile saved,
+    // not the spelling typed on the command line.
+    ...(providerConfig.providerApp
+      ? { extraFlags: { providerApp: providerConfig.providerApp } }
+      : {}),
   });
 }
 
@@ -99,6 +108,8 @@ type HubProviderProfile = {
   credentialEnv: readonly [string, string];
   /** Scheme of the provider's own app references, e.g. `bs://` or `lt://`. */
   appScheme: string;
+  /** The hub's own reference grammar, checked here so a malformed id fails at connect. */
+  isAppReference: (reference: string) => boolean;
   appHint: string;
 };
 
@@ -107,6 +118,7 @@ const BROWSERSTACK_HUB_PROFILE: HubProviderProfile = {
   label: 'BrowserStack',
   credentialEnv: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   appScheme: 'bs://',
+  isAppReference: isBrowserStackAppReference,
   appHint: '<bs://app-id-or-local-path>',
 };
 
@@ -115,6 +127,7 @@ const TESTMU_HUB_PROFILE: HubProviderProfile = {
   label: 'TestMu AI',
   credentialEnv: ['LT_USERNAME', 'LT_ACCESS_KEY'],
   appScheme: 'lt://',
+  isAppReference: isTestMuAppReference,
   appHint: '<lt://app-id, URL, or local path>',
 };
 
@@ -175,11 +188,13 @@ function normalizeHubAppReference(hub: HubProviderProfile, app: string, cwd: str
   if (/^https?:\/\//i.test(app)) return app;
   // URI schemes are case-insensitive; the hub only matches the lower-case spelling.
   if (app.slice(0, hub.appScheme.length).toLowerCase() === hub.appScheme) {
-    const id = app.slice(hub.appScheme.length);
-    if (id.length > 0) return `${hub.appScheme}${id}`;
-    throw new AppError('INVALID_ARGS', `${hub.command} --provider-app ${app} has no app id.`, {
-      hint: `Pass ${hub.appHint}.`,
-    });
+    const reference = `${hub.appScheme}${app.slice(hub.appScheme.length)}`;
+    if (hub.isAppReference(reference)) return reference;
+    throw new AppError(
+      'INVALID_ARGS',
+      `${hub.command} --provider-app ${app} is not a valid ${hub.appScheme} app reference.`,
+      { hint: `Pass ${hub.appHint}.` },
+    );
   }
   const resolvedPath = path.resolve(cwd, app);
   try {

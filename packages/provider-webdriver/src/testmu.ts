@@ -4,6 +4,7 @@ import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contract
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { isTestMuAppReference } from './providers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
   appendUrlPath,
@@ -26,6 +27,8 @@ const TESTMU_APP_UPLOAD_ENDPOINTS: Record<ProviderDeviceType, string> = {
 };
 export const TESTMU_APPS_ENDPOINT = 'https://manual-api.lambdatest.com/app/data';
 export const TESTMU_API_ENDPOINT = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
+export { isTestMuAppReference };
+
 const TESTMU_DASHBOARD_TEST_URL = 'https://appautomation.lambdatest.com/test?testID=';
 
 export type TestMuCapabilitiesOptions = {
@@ -191,12 +194,6 @@ export function buildTestMuCapabilities(
       w3c: true,
     },
   };
-}
-
-const TESTMU_APP_REFERENCE = /^lt:\/\/[\w.-]+$/;
-
-export function isTestMuAppReference(value: string): boolean {
-  return TESTMU_APP_REFERENCE.test(value);
 }
 
 /** The upload and app-list APIs answer with a bare app id or an `lt://` reference. */
