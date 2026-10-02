@@ -6,7 +6,6 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   DeployMaterializedAppInput,
-  MaterializedAppSource,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
@@ -105,7 +104,7 @@ export function createWebDriverDeploymentRuntime(
           '',
           {
             appPath: input.artifact.installablePath,
-            uploadPath: materializedUploadPath(input.artifact),
+            uploadPath: input.artifact.uploadPath ?? input.artifact.installablePath,
           },
           {
             appIdentifierHint: input.artifact.bundleId,
@@ -115,17 +114,6 @@ export function createWebDriverDeploymentRuntime(
         ),
       ),
   });
-}
-
-/**
- * Materialization extracts an iOS `.app` bundle out of a zipped simulator build or an .ipa, and no
- * hosted upload API takes a directory, so the uploader gets the archive the bundle came from.
- */
-function materializedUploadPath(artifact: MaterializedAppSource): string {
-  const { archivePath, installablePath } = artifact;
-  return archivePath && /\.(zip|ipa)$/i.test(archivePath) && /\.app\/?$/i.test(installablePath)
-    ? archivePath
-    : installablePath;
 }
 
 function deploymentFact(session: WebDriverProviderSession | undefined): RuntimeOperationFact {

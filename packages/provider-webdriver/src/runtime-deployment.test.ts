@@ -86,9 +86,9 @@ test('aborts a WebDriver provider deployment while its install is in flight', as
   expect(installApp).toHaveBeenCalledWith('bs://uploaded-app', controller.signal);
 });
 
-// Materialization extracts `App.app.zip` (or an .ipa) to a `.app` directory, which no hosted
-// upload API accepts; the archive it came from is the uploadable build.
-test('a hosted upload of a materialized iOS bundle sends the archive it was extracted from', async () => {
+// The materializer knows which file carries the build; the deployment runtime must not second-guess
+// it from extensions, or a URL zip wrapping an .ipa would upload the wrapper.
+test('a hosted upload sends the file the materializer names, else the installable', async () => {
   const uploaded: string[] = [];
   const installApp = vi.fn(async () => undefined);
   const deployment = createWebDriverDeploymentRuntime({
@@ -109,20 +109,18 @@ test('a hosted upload of a materialized iOS bundle sends the archive it was extr
   const result = await deploy(iosDevice, {
     archivePath: '/m/App.app.zip',
     installablePath: '/m/extracted/App.app',
+    uploadPath: '/m/App.app.zip',
     bundleId: 'com.example.app',
   });
-  await deploy(iosDevice, { archivePath: '/m/App.ipa', installablePath: '/m/x/Payload/App.app' });
-  await deploy(iosDevice, { installablePath: '/m/App.app' });
+  await deploy(iosDevice, {
+    archivePath: '/m/wrapper.zip',
+    installablePath: '/m/x/Payload/App.app',
+    uploadPath: '/m/x/App.ipa',
+  });
   await deploy(iosDevice, { archivePath: '/m/App.tar.gz', installablePath: '/m/x/App.app' });
   await deploy(device, { archivePath: '/m/build.zip', installablePath: '/m/x/app.apk' });
 
-  expect(uploaded).toEqual([
-    '/m/App.app.zip',
-    '/m/App.ipa',
-    '/m/App.app',
-    '/m/x/App.app',
-    '/m/x/app.apk',
-  ]);
+  expect(uploaded).toEqual(['/m/App.app.zip', '/m/x/App.ipa', '/m/x/App.app', '/m/x/app.apk']);
   expect(result).toEqual({ bundleId: 'com.example.app', launchTarget: 'com.example.app' });
   expect(installApp).toHaveBeenNthCalledWith(1, 'lt://1', expect.any(AbortSignal));
 });
@@ -139,6 +137,7 @@ test('a provider without an uploader still installs the materialized bundle path
       artifact: {
         archivePath: '/m/App.app.zip',
         installablePath: '/m/extracted/App.app',
+        uploadPath: '/m/App.app.zip',
         bundleId: 'com.example.app',
         cleanup: async () => {},
       },
@@ -175,7 +174,14 @@ test('TestMu uploads the zipped simulator build that install-from-source extract
 
     await deployment.deployMaterializedApp(
       iosDevice,
-      { artifact: { archivePath, installablePath, cleanup: async () => {} } },
+      {
+        artifact: {
+          archivePath,
+          installablePath,
+          uploadPath: archivePath,
+          cleanup: async () => {},
+        },
+      },
       new AbortController().signal,
     );
 
