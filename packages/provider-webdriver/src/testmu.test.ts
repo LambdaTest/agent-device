@@ -197,18 +197,19 @@ test('TestMu upload reads the lt:// reference and aborts while the request is in
   const abortReason = new Error('request cancelled during TestMu AI upload');
   try {
     await fs.writeFile(appPath, 'placeholder');
+    let started: () => void = () => {};
+    const fetchStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     globalThis.fetch = async (_input, init) =>
       await new Promise<Response>((_resolve, reject) => {
         assert.equal(init?.signal, controller.signal);
-        if (init?.signal?.aborted) {
-          reject(init.signal.reason);
-          return;
-        }
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+        started();
       });
 
     const pending = uploadTestMuApp(appPath, auth, controller.signal);
-    await Promise.resolve();
+    await fetchStarted;
     controller.abort(abortReason);
     await assert.rejects(pending, (error: unknown) => error === abortReason);
 

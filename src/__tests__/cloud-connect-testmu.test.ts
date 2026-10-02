@@ -2,17 +2,16 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { connectCommand } from '../cli/commands/connection.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../provider-webdriver.ts', () => ({
   providerWebDriver: { verifyConnection: vi.fn() },
@@ -312,29 +311,6 @@ test('connect limrun refuses profile fields Limrun does not read', async () => {
     /--provider-os-version, --provider-device-type are not supported by Limrun/,
   );
 });
-
-async function connectWithGeneratedProviderProfile(options: {
-  stateDir: string;
-  positionals: string[];
-  flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
-}): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  try {
-    await connectCommand({
-      positionals: options.positionals,
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        stateDir: options.stateDir,
-        ...options.flags,
-      },
-      client: {} as AgentDeviceClient,
-    });
-  } finally {
-    stdoutWrite.mockRestore();
-  }
-}
 
 function readGeneratedConfig(configPath: string): {
   providerApp?: string;
