@@ -4,6 +4,8 @@ import XCTest
 import ObjectiveC.runtime
 
 private final class AlertTapDeadlineStub: NSObject {
+  static var status: RunnerTapSynthesisStatus?
+
   @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
   class func synthesizeTap(
     application: XCUIApplication,
@@ -13,7 +15,7 @@ private final class AlertTapDeadlineStub: NSObject {
     deadline: NSDate?,
     errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
   ) -> RunnerTapSynthesisStatus {
-    deadline == nil ? .succeeded : .deadlineExceeded
+    status ?? (deadline == nil ? .succeeded : .deadlineExceeded)
   }
 }
 #endif
@@ -117,12 +119,22 @@ extension RunnerTests {
     let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
     let original = method_getImplementation(method)
     method_setImplementation(method, method_getImplementation(stub))
-    defer { method_setImplementation(method, original) }
+    defer {
+      AlertTapDeadlineStub.status = nil
+      method_setImplementation(method, original)
+    }
 
     let outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
 
     XCTAssertNil(outcome)
     XCTAssertTrue(app.alerts.firstMatch.exists)
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+
+    AlertTapDeadlineStub.status = RunnerTapSynthesisStatus(rawValue: 999)
+    let unknown = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+    guard case .unsupported? = unknown else {
+      return XCTFail("an unknown native status must report failure rather than deadline expiry")
+    }
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 

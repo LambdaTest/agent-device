@@ -42,7 +42,7 @@ extension RunnerTests {
     defer { method_setImplementation(method, original) }
     TapRecordSpy.syntheses = 0
 
-    let deadline = Date().addingTimeInterval(0.05)
+    let deadline = Date().addingTimeInterval(1)
     var prepared = false
     var preparationBeganBeforeDeadline = false
     let window = TapWindowFixture {

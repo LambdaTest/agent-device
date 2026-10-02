@@ -169,14 +169,17 @@ extension RunnerTests {
         case .succeeded:
           outcome = .performed
         case .deadlineExceeded:
-          break
+          outcome = nil
         case .failed:
           outcome = .unsupported(
             message: message as String? ?? "private XCTest event synthesis failed",
             hint: "Inspect the current alert before deciding whether to act again."
           )
         @unknown default:
-          break
+          outcome = .unsupported(
+            message: "private XCTest event synthesis returned an unknown status",
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
         }
 #else
         outcome = activateElement(
