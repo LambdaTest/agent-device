@@ -1,14 +1,12 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
-import { AppError } from '@agent-device/kernel/errors';
-import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
   appFileUploadForm,
   asRecord,
-  basicAuthHeader,
   createHubUploadApp,
+  fetchProviderSessionDetails,
   postHubAppUpload,
   resolveHubAppReference,
   trimTrailingSlash,
@@ -156,21 +154,12 @@ async function fetchBrowserStackSessionDetails(
   const endpoint = new URL(
     `${trimTrailingSlash(String(options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT))}/${sessionId}.json`,
   );
-  const response = await fetch(endpoint, {
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
-    },
+  const json = await fetchProviderSessionDetails(endpoint, {
+    clientVersion: options.clientVersion,
+    auth: options,
+    service: 'BrowserStack',
   });
-  const json = (await response.json()) as unknown;
-  if (!response.ok || !json || typeof json !== 'object') {
-    throw new AppError('COMMAND_FAILED', 'BrowserStack session details lookup failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
-  const details = (json as { automation_session?: unknown }).automation_session ?? json;
-  return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
+  return asRecord(json.automation_session) ?? json;
 }
 
 function mapBrowserStackArtifacts(
