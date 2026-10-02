@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -6,7 +7,6 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   DeployMaterializedAppInput,
-  MaterializedAppSource,
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
@@ -105,7 +105,7 @@ export function createWebDriverDeploymentRuntime(
           '',
           {
             appPath: input.artifact.installablePath,
-            uploadPath: materializedUploadPath(input.artifact),
+            uploadPath: input.artifact.uploadPath ?? input.artifact.installablePath,
           },
           {
             appIdentifierHint: input.artifact.bundleId,
@@ -115,17 +115,6 @@ export function createWebDriverDeploymentRuntime(
         ),
       ),
   });
-}
-
-/**
- * Materialization extracts an iOS `.app` bundle out of a zipped simulator build or an .ipa, and no
- * hosted upload API takes a directory, so the uploader gets the archive the bundle came from.
- */
-function materializedUploadPath(artifact: MaterializedAppSource): string {
-  const { archivePath, installablePath } = artifact;
-  return archivePath && /\.(zip|ipa)$/i.test(archivePath) && /\.app\/?$/i.test(installablePath)
-    ? archivePath
-    : installablePath;
 }
 
 function deploymentFact(session: WebDriverProviderSession | undefined): RuntimeOperationFact {
@@ -167,6 +156,7 @@ async function uploadAppIfNeeded(
   }
   const uploadApp = session.prepared.uploadApp ?? options.uploadApp;
   if (!uploadApp) return undefined;
+  await assertUploadableFile(options.provider, appPath);
   return await uploadApp({
     provider: options.provider,
     lease: session.lease,
@@ -176,6 +166,21 @@ async function uploadAppIfNeeded(
     options: installOptions,
     signal,
   });
+}
+
+/** Hosted upload APIs take one file; an extracted `.app` with no declared archive is a directory. */
+async function assertUploadableFile(provider: string, appPath: string): Promise<void> {
+  const stat = await fs.stat(appPath).catch(() => undefined);
+  if (!stat || stat.isFile()) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${provider} can only upload an app file, not a directory: ${appPath}`,
+    {
+      provider,
+      appPath,
+      hint: 'Zip the iOS simulator .app bundle and install the .zip, or install the .ipa, .apk, or .aab.',
+    },
+  );
 }
 
 function deploymentResult(

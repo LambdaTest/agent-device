@@ -110,6 +110,7 @@ async function fetchBrowserStackJson(
     hints: {
       service: 'BrowserStack',
       unauthorizedHint: 'Check BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY.',
+      serviceHint: 'Retry connect or check the BrowserStack service status.',
       networkHint: 'Check network access to api-cloud.browserstack.com and retry connect.',
     },
   });

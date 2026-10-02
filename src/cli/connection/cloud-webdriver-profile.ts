@@ -1,13 +1,14 @@
 import {
+  CLOUD_WEBDRIVER_PROFILE_FIELDS,
   CLOUD_WEBDRIVER_PROVIDERS,
   readAwsDeviceFarmRegionFromArn,
-  rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
 import {
-  rejectTestMuOnlyProviderFlags,
-  rejectUnsupportedTestMuDeviceFeatures,
-} from '@agent-device/provider-webdriver/testmu-device-features';
+  isBrowserStackAppReference,
+  isTestMuAppReference,
+} from '@agent-device/provider-webdriver/providers';
+import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -27,7 +28,12 @@ export function resolveCloudWebDriverConnectProfile(options: {
   cwd: string;
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const providerConfig = requireConnectProfileBuilder(options.provider)(options);
+  const buildProfileFields = requireConnectProfileBuilder(options.provider);
+  rejectRefusedProviderProfileFields(
+    options.flags,
+    CLOUD_WEBDRIVER_PROFILE_FIELDS[options.provider],
+  );
+  const providerConfig = buildProfileFields(options);
   const clientId = buildConnectClientId(
     options.provider,
     options.stateDir,
@@ -53,6 +59,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
+    // Verification reads these flags; it must see the canonical reference the profile saved,
+    // not the spelling typed on the command line.
+    ...(providerConfig.providerApp
+      ? { extraFlags: { providerApp: providerConfig.providerApp } }
+      : {}),
   });
 }
 
@@ -97,6 +108,8 @@ type HubProviderProfile = {
   credentialEnv: readonly [string, string];
   /** Scheme of the provider's own app references, e.g. `bs://` or `lt://`. */
   appScheme: string;
+  /** The hub's own reference grammar, checked here so a malformed id fails at connect. */
+  isAppReference: (reference: string) => boolean;
   appHint: string;
 };
 
@@ -105,6 +118,7 @@ const BROWSERSTACK_HUB_PROFILE: HubProviderProfile = {
   label: 'BrowserStack',
   credentialEnv: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   appScheme: 'bs://',
+  isAppReference: isBrowserStackAppReference,
   appHint: '<bs://app-id-or-local-path>',
 };
 
@@ -113,6 +127,7 @@ const TESTMU_HUB_PROFILE: HubProviderProfile = {
   label: 'TestMu AI',
   credentialEnv: ['LT_USERNAME', 'LT_ACCESS_KEY'],
   appScheme: 'lt://',
+  isAppReference: isTestMuAppReference,
   appHint: '<lt://app-id, URL, or local path>',
 };
 
@@ -121,7 +136,6 @@ function browserStackProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
-  rejectTestMuOnlyProviderFlags(options.flags, CLOUD_WEBDRIVER_PROVIDERS.browserStack);
   return hubProviderProfileFields(BROWSERSTACK_HUB_PROFILE, options);
 }
 
@@ -130,7 +144,6 @@ function testMuProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
-  rejectUnsupportedTestMuDeviceFeatures(options.flags);
   return {
     ...hubProviderProfileFields(TESTMU_HUB_PROFILE, options),
     providerDeviceType: options.flags.providerDeviceType,
@@ -172,7 +185,17 @@ function hubProviderProfileFields(
 }
 
 function normalizeHubAppReference(hub: HubProviderProfile, app: string, cwd: string): string {
-  if (app.startsWith(hub.appScheme) || /^https?:\/\//i.test(app)) return app;
+  if (/^https?:\/\//i.test(app)) return app;
+  // URI schemes are case-insensitive; the hub only matches the lower-case spelling.
+  if (app.slice(0, hub.appScheme.length).toLowerCase() === hub.appScheme) {
+    const reference = `${hub.appScheme}${app.slice(hub.appScheme.length)}`;
+    if (hub.isAppReference(reference)) return reference;
+    throw new AppError(
+      'INVALID_ARGS',
+      `${hub.command} --provider-app ${app} is not a valid ${hub.appScheme} app reference.`,
+      { hint: `Pass ${hub.appHint}.` },
+    );
+  }
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;
@@ -187,8 +210,6 @@ function awsDeviceFarmProfileFields(options: {
   env?: EnvMap;
 }): RemoteConfigProfile {
   const { env, flags } = options;
-  rejectBrowserStackOnlyDeviceFeatures(flags, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
-  rejectTestMuOnlyProviderFlags(flags, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
   const platform = requireCloudWebDriverPlatform(
     flags.platform,
     'connect aws-device-farm requires --platform ios|android.',

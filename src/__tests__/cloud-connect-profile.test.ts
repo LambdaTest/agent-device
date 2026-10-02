@@ -17,6 +17,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
@@ -747,7 +748,7 @@ test('connect does not activate provider state when verification fails', async (
   }
 });
 
-test('connect aws-device-farm rejects BrowserStack-only device-feature flags', () => {
+test('connect aws-device-farm rejects device-feature flags it does not read', () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
 
   try {
@@ -774,7 +775,7 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
         assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /only supported by BrowserStack, not aws-device-farm/);
+        assert.match(error.message, /are not supported by AWS Device Farm/);
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',
@@ -852,29 +853,6 @@ async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
   const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
   try {
     await task();
-  } finally {
-    stdoutWrite.mockRestore();
-  }
-}
-
-async function connectWithGeneratedProviderProfile(options: {
-  stateDir: string;
-  positionals: string[];
-  flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
-}): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  try {
-    await connectCommand({
-      positionals: options.positionals,
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        stateDir: options.stateDir,
-        ...options.flags,
-      },
-      client: {} as AgentDeviceClient,
-    });
   } finally {
     stdoutWrite.mockRestore();
   }

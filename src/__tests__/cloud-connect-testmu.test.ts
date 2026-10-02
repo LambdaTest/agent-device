@@ -2,17 +2,16 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { connectCommand } from '../cli/commands/connection.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../provider-webdriver.ts', () => ({
   providerWebDriver: { verifyConnection: vi.fn() },
@@ -80,6 +79,51 @@ test('connect testmu generates a local provider profile and verifies the virtual
     assert.equal(generated.providerOsVersion, '18.0');
     assert.equal(generated.providerBuild, 'build-a');
     assert.equal(JSON.stringify(generated).includes('lt-key'), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect canonicalizes an upper-case app scheme and refuses an empty app id', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-app-scheme-');
+  const base = { json: false, help: false, version: false, platform: 'ios' as const };
+  const connect = (provider: 'testmu' | 'browserstack', providerApp: string) =>
+    resolveCloudWebDriverConnectProfile({
+      provider,
+      stateDir: path.join(tempRoot, `.state-${provider}`),
+      cwd: tempRoot,
+      env: {
+        LT_USERNAME: 'u',
+        LT_ACCESS_KEY: 'k',
+        BROWSERSTACK_USERNAME: 'u',
+        BROWSERSTACK_ACCESS_KEY: 'k',
+      },
+      flags: { ...base, device: 'iPhone 16', providerOsVersion: '18.0', providerApp },
+    });
+
+  try {
+    const upperCase = connect('testmu', 'LT://APP1');
+    assert.equal(readGeneratedConfig(upperCase.remoteConfigPath).providerApp, 'lt://APP1');
+    // Connect verification reads these flags, so they must carry the canonical reference too.
+    assert.equal(upperCase.flags.providerApp, 'lt://APP1');
+    assert.equal(
+      readGeneratedConfig(connect('browserstack', 'Bs://abc').remoteConfigPath).providerApp,
+      'bs://abc',
+    );
+    for (const [provider, app] of [
+      ['testmu', 'lt://'],
+      ['testmu', 'lt://a b'],
+      ['testmu', 'LT://a/b'],
+      ['browserstack', 'bs://'],
+    ] as const) {
+      assert.throws(
+        () => connect(provider, app),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          error.message.includes(`--provider-app ${app} is not a valid`),
+      );
+    }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -238,10 +282,8 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'INVALID_ARGS');
-          assert.match(
-            error.message,
-            new RegExp(`--provider-device-type is only supported by TestMu AI, not ${provider}`),
-          );
+          assert.match(error.message, /^--provider-device-type is not supported by /);
+          assert.equal(error.details?.provider, provider);
           return true;
         },
       );
@@ -252,40 +294,30 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
   }
 });
 
-test('connect limrun refuses the TestMu device type', async () => {
+test('connect limrun refuses profile fields Limrun does not read', async () => {
   const result = await runCliCapture(
-    ['connect', 'limrun', '--platform', 'ios', '--provider-device-type', 'real', '--json'],
+    [
+      'connect',
+      'limrun',
+      '--platform',
+      'ios',
+      '--provider-device-type',
+      'real',
+      '--provider-os-version',
+      '18',
+      '--json',
+    ],
     {
       env: { LIMRUN_API_KEY: 'lim_test_key' },
       stateDirPrefix: 'agent-device-connect-limrun-device-type-',
     },
   );
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /--provider-device-type is only supported by TestMu AI, not limrun/);
+  assert.match(
+    result.stdout,
+    /--provider-os-version, --provider-device-type are not supported by Limrun/,
+  );
 });
-
-async function connectWithGeneratedProviderProfile(options: {
-  stateDir: string;
-  positionals: string[];
-  flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
-}): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  try {
-    await connectCommand({
-      positionals: options.positionals,
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        stateDir: options.stateDir,
-        ...options.flags,
-      },
-      client: {} as AgentDeviceClient,
-    });
-  } finally {
-    stdoutWrite.mockRestore();
-  }
-}
 
 function readGeneratedConfig(configPath: string): {
   providerApp?: string;

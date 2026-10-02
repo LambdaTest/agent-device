@@ -50,16 +50,6 @@ export const TESTMU_DEVICE_FEATURE_SPECS: readonly TestMuDeviceFeatureSpec[] = [
   { field: 'providerLocale', capability: 'locale', flag: '--provider-locale' },
 ];
 
-/** Hosted-provider flags other vendors own and TestMu has no capability for. */
-const TESTMU_UNSUPPORTED_DEVICE_FEATURE_FLAGS: ReadonlyArray<{
-  field: keyof CloudProviderProfileFields;
-  flag: string;
-}> = [
-  { field: 'providerNetworkProfile', flag: '--provider-network-profile' },
-  { field: 'providerCustomNetwork', flag: '--provider-custom-network' },
-  { field: 'providerNoResignApp', flag: '--provider-no-resign-app' },
-];
-
 /** Builds the `lt:options` fragment for the configured device features. */
 export function buildTestMuDeviceFeatureCapabilities(
   fields: TestMuDeviceFeatureFields,
@@ -71,31 +61,6 @@ export function buildTestMuDeviceFeatureCapabilities(
     capabilities[spec.capability] = spec.project ? spec.project(value) : value;
   }
   return capabilities;
-}
-
-/**
- * Fails when flags TestMu cannot act on were given. Called from both `connect testmu` (through the
- * `./testmu-device-features` subpath, so the package entry stays lazy) and session preparation,
- * since the typed client and hand-authored profiles skip `connect`.
- */
-export function rejectUnsupportedTestMuDeviceFeatures(
-  flags: Record<string, unknown> | undefined,
-): void {
-  const configured = TESTMU_UNSUPPORTED_DEVICE_FEATURE_FLAGS.filter(({ field }) => {
-    const value = flags?.[field];
-    return value !== undefined && value !== false && value !== '';
-  }).map(({ flag }) => flag);
-  if (configured.length === 0) return;
-  const plural = configured.length !== 1;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${configured.join(', ')} ${plural ? 'are' : 'is'} not supported by TestMu AI.`,
-    {
-      hint: `Drop ${plural ? 'those flags' : 'the flag'}; TestMu AI has no equivalent capability.`,
-      provider: 'testmu',
-      flags: configured,
-    },
-  );
 }
 
 /**
@@ -130,25 +95,4 @@ export function readTestMuDeviceType(
     hint: `Use ${PROVIDER_DEVICE_TYPES.join('|')}.`,
     flag: '--provider-device-type',
   });
-}
-
-/**
- * Fails when another provider was given a TestMu-only flag. Like the BrowserStack-only check, it
- * runs in both the connect profile builder and session preparation.
- */
-export function rejectTestMuOnlyProviderFlags(
-  flags: Record<string, unknown> | undefined,
-  provider: string,
-): void {
-  const value = flags?.providerDeviceType;
-  if (value === undefined || value === '') return;
-  throw new AppError(
-    'INVALID_ARGS',
-    `--provider-device-type is only supported by TestMu AI, not ${provider}.`,
-    {
-      hint: 'Drop the flag or use the testmu provider.',
-      provider,
-      flags: ['--provider-device-type'],
-    },
-  );
 }

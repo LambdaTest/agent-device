@@ -142,7 +142,7 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
   });
 }, 15_000);
 
-test('AWS Device Farm facade rejects BrowserStack-owned device features at session preparation', async () => {
+test('AWS Device Farm facade rejects device features it does not read at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const provider = createProviderWebDriver({
@@ -172,7 +172,7 @@ test('AWS Device Farm facade rejects BrowserStack-owned device features at sessi
         (error: unknown) => {
           assert.match(
             (error as Error).message,
-            /--provider-device-orientation, --provider-network-profile are only supported by BrowserStack, not aws-device-farm/,
+            /--provider-device-orientation, --provider-network-profile are not supported by AWS Device Farm/,
           );
           return true;
         },
@@ -231,7 +231,7 @@ test('TestMu facade routes a real-device session to the real pool and its upload
   });
 }, 15_000);
 
-test('BrowserStack facade rejects the TestMu device type at session preparation', async () => {
+test('BrowserStack facade rejects the device type at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const provider = createProviderWebDriver({
       clientVersion: CLIENT_VERSION,
@@ -253,9 +253,45 @@ test('BrowserStack facade rejects the TestMu device type at session preparation'
           await runtime.leaseLifecycle.allocate?.(lease, {
             flags: { ...context.flags, providerDeviceType: 'real' },
           }),
-        /--provider-device-type is only supported by TestMu AI, not browserstack/,
+        /--provider-device-type is not supported by BrowserStack/,
       );
       assert.deepEqual(server.calls, []);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+}, 15_000);
+
+test('BrowserStack refuses a refused field on a repeat allocation of its live lease', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const provider = createProviderWebDriver({
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: unexpectedHostCommand,
+    });
+    const runtime = runtimeFor(
+      provider.createDefaultRuntimes({
+        BROWSERSTACK_USERNAME: 'user',
+        BROWSERSTACK_ACCESS_KEY: 'key',
+        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      }),
+      CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    );
+    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
+    const context = browserStackContext(lease);
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease, context);
+      const sessionCalls = server.calls.length;
+      await assert.rejects(
+        async () =>
+          await runtime.leaseLifecycle.allocate?.(lease, {
+            flags: { ...context.flags, providerDeviceType: 'real' },
+          }),
+        /--provider-device-type is not supported by BrowserStack/,
+      );
+      assert.equal(server.calls.length, sessionCalls);
+      assert.deepEqual(await runtime.leaseLifecycle.heartbeat?.(lease), {
+        provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      });
     } finally {
       await runtime.shutdown();
     }
