@@ -126,14 +126,18 @@ extension RunnerTests {
       referenceFrame: context.referenceFrame,
       orientation: orientation
     )
-    if let message = RunnerSynthesizedGesture.synthesizeTap(
+    var message: NSString?
+    let status = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: app,
       resolvedWindow: context.resolvedWindow,
       x: Double(point.x),
-      y: Double(point.y)
-    ) {
+      y: Double(point.y),
+      deadline: nil,
+      errorMessage: &message
+    )
+    if status != .succeeded {
       return .unsupported(
-        message: message,
+        message: message as String? ?? "private XCTest event synthesis failed",
         hint: "Falling back to XCTest coordinate tap may be slower and can still need a healthy accessibility tree."
       )
     }

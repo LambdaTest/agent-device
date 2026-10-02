@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   enum RunnerAlertSource {
@@ -138,12 +139,53 @@ extension RunnerTests {
 #if !os(tvOS)
         guard !frame.isEmpty else { return }
 #endif
+#if os(iOS)
+        guard let context = synthesizedCoordinateContext(
+          app: alert.ownerApp,
+          policy: synthesizedGesturePolicy(.coordinateTap)
+        ) else {
+          outcome = .unsupported(
+            message: "alert activation could not resolve its application window",
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
+          return
+        }
+        let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: alert.ownerApp))
+        let point = CoordinateSpaceRotation.native(
+          point: CGPoint(x: frame.midX, y: frame.midY),
+          in: context.referenceFrame,
+          interfaceOrientation: orientation
+        )
+        var message: NSString?
+        let status = RunnerSynthesizedGesture.synthesizeTap(
+          withApplication: alert.ownerApp,
+          resolvedWindow: context.resolvedWindow,
+          x: Double(point.x),
+          y: Double(point.y),
+          deadline: deadline,
+          errorMessage: &message
+        )
+        switch status {
+        case .succeeded:
+          outcome = .performed
+        case .deadlineExceeded:
+          break
+        case .failed:
+          outcome = .unsupported(
+            message: message as String? ?? "private XCTest event synthesis failed",
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
+        @unknown default:
+          break
+        }
+#else
         outcome = activateElement(
           app: alert.ownerApp,
           element: button,
           action: "alert \(action)",
           resolvedFrame: frame
         )
+#endif
       }
     }
     return outcome
