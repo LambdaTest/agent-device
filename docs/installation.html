@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.56d3fdefc6.js"></script>
+<script defer src="/agent-device/static/js/index.3376a86465.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -58,7 +58,11 @@ toolchain, and dev-server readiness before handing the CLI to an agent.</p>
 <li>Node.js 24 or newer for web automation, which hard-fails below it. The rest of the CLI keeps the
 22.12 floor, so check <code>node --version</code> in the shell that runs <code>agent-device web setup</code> and
 <code>agent-device doctor</code> before trusting a web result.</li>
-<li>Xcode for iOS simulator/device automation (<code>simctl</code> + <code>devicectl</code>)</li>
+<li>Xcode for iOS simulator/device automation (<code>simctl</code> + <code>devicectl</code>). <code>xcrun</code> picks the Xcode from
+<code>DEVELOPER_DIR</code>, otherwise <code>xcode-select -p</code>. A <code>DEVELOPER_DIR</code> exported in the shell running
+<code>agent-device</code> applies to the Apple tools a local daemon runs for that command; without it, the
+daemon uses the environment it was started in. Set <code>DEVELOPER_DIR=&quot;&quot;</code> to use the daemon host&#x27;s
+<code>xcode-select</code> selection instead.</li>
 <li>Android SDK / ADB for Android</li>
 <li>HarmonyOS Command Line Tools for HarmonyOS (<code>hdc</code> available through <code>HDC_SDK_PATH</code>, <code>DEVECO_SDK_HOME</code>, or <code>HARMONYOS_COMMAND_LINE_TOOLS</code>)</li>
 <li>Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV</li>
