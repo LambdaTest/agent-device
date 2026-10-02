@@ -174,9 +174,13 @@ export const CLOUD_WEBDRIVER_PROFILE_FIELDS: Readonly<
 
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
-  /** Every profile field, consumed or refused; session preparation refuses the refused ones. */
+  /** Every profile field, consumed or refused; lease allocation refuses the refused ones. */
   profileFields: ProviderProfileFieldDeclaration;
-  createRuntime: (env: DefaultCloudWebDriverProviderRuntimeEnv) => CloudWebDriverRuntime;
+  /** Receives `profileFields`, which the runtime requires, so the two cannot drift apart. */
+  createRuntime: (
+    env: DefaultCloudWebDriverProviderRuntimeEnv,
+    profileFields: ProviderProfileFieldDeclaration,
+  ) => CloudWebDriverRuntime;
   listArtifactsFromEnv: (
     providerSessionId: string,
     env: DefaultCloudWebDriverArtifactEnv,
@@ -190,11 +194,11 @@ export function createCloudWebDriverProviderDefinitions(
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
       profileFields: BROWSERSTACK_PROFILE_FIELDS,
-      createRuntime: (env) =>
+      createRuntime: (env, profileFields) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-          profileFields: BROWSERSTACK_PROFILE_FIELDS,
+          profileFields,
           platform: 'android',
           deviceName: 'BrowserStack device',
           endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
@@ -299,11 +303,11 @@ export function createCloudWebDriverProviderDefinitions(
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
       profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
-      createRuntime: (env) =>
+      createRuntime: (env, profileFields) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-          profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
+          profileFields,
           endpoint: 'http://127.0.0.1/',
           platform: 'android',
           deviceName: 'AWS Device Farm device',
@@ -370,11 +374,11 @@ export function createCloudWebDriverProviderDefinitions(
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
       profileFields: TESTMU_PROFILE_FIELDS,
-      createRuntime: (env) =>
+      createRuntime: (env, profileFields) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
-          profileFields: TESTMU_PROFILE_FIELDS,
+          profileFields,
           platform: 'android',
           deviceName: 'TestMu AI device',
           endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_WEBDRIVER_ENDPOINT,
