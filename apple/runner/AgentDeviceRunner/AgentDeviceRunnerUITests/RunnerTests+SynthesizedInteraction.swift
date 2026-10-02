@@ -95,8 +95,9 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double,
-    context: SynthesizedCoordinateContext? = nil
-  ) -> RunnerInteractionOutcome {
+    context: SynthesizedCoordinateContext? = nil,
+    deadline: Date? = nil
+  ) -> RunnerInteractionOutcome? {
 #if os(iOS)
     guard x.isFinite, y.isFinite else {
       return .unsupported(
@@ -132,16 +133,25 @@ extension RunnerTests {
       resolvedWindow: context.resolvedWindow,
       x: Double(point.x),
       y: Double(point.y),
-      deadline: nil,
+      deadline: deadline,
       errorMessage: &message
     )
-    if status != .succeeded {
+    switch status {
+    case .succeeded:
+      return .performed
+    case .deadlineExceeded:
+      return nil
+    case .failed:
       return .unsupported(
         message: message as String? ?? "private XCTest event synthesis failed",
         hint: "Falling back to XCTest coordinate tap may be slower and can still need a healthy accessibility tree."
       )
+    @unknown default:
+      return .unsupported(
+        message: "private XCTest event synthesis returned an unknown status",
+        hint: "Inspect the current app before deciding whether to act again."
+      )
     }
-    return .performed
 #elseif os(tvOS)
     return .unsupported(
       message: "coordinate tap is not supported on tvOS; move focus with swipe or scroll, then select the focused element",

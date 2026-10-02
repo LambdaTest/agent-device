@@ -1,5 +1,4 @@
 import XCTest
-import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   enum RunnerAlertSource {
@@ -148,33 +147,8 @@ extension RunnerTests {
           )
           return
         }
-        guard let context = synthesizedCoordinateContext(
-          app: alert.ownerApp,
-          policy: synthesizedGesturePolicy(.coordinateTap)
-        ) else {
-          outcome = .unsupported(
-            message: "alert activation could not resolve its application window",
-            hint: "Inspect the current alert before deciding whether to act again."
-          )
-          return
-        }
-        let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: alert.ownerApp))
-        let point = CoordinateSpaceRotation.native(
-          point: CGPoint(x: frame.midX, y: frame.midY),
-          in: context.referenceFrame,
-          interfaceOrientation: orientation
-        )
-        var message: NSString?
-        let status = RunnerSynthesizedGesture.synthesizeTap(
-          withApplication: alert.ownerApp,
-          resolvedWindow: context.resolvedWindow,
-          x: Double(point.x),
-          y: Double(point.y),
-          deadline: deadline,
-          errorMessage: &message
-        )
-        switch status {
-        case .succeeded:
+        switch synthesizedTapAt(app: alert.ownerApp, x: frame.midX, y: frame.midY, deadline: deadline) {
+        case .performed?:
           typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
           let waitForQuiescence = unsafeBitCast(
             alert.ownerApp.method(for: postEventWaitSelector),
@@ -182,18 +156,13 @@ extension RunnerTests {
           )
           waitForQuiescence(alert.ownerApp, postEventWaitSelector, false)
           outcome = .performed
-        case .deadlineExceeded:
-          outcome = nil
-        case .failed:
+        case .unsupported(let message, _)?:
           outcome = .unsupported(
-            message: message as String? ?? "private XCTest event synthesis failed",
+            message: message,
             hint: "Inspect the current alert before deciding whether to act again."
           )
-        @unknown default:
-          outcome = .unsupported(
-            message: "private XCTest event synthesis returned an unknown status",
-            hint: "Inspect the current alert before deciding whether to act again."
-          )
+        case nil:
+          break
         }
 #else
         outcome = activateElement(
