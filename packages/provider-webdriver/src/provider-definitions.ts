@@ -1,6 +1,7 @@
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
@@ -21,7 +22,6 @@ import {
 import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
-  rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
@@ -82,8 +82,100 @@ const TESTMU_CAPABILITY_OVERRIDES = {
 const loadTestMu = async () => await import('./testmu.ts');
 const loadTestMuDeviceFeatures = async () => await import('./testmu-device-features.ts');
 
+const AWS_DEVICE_FARM_FIELDS_REFUSED = {
+  awsProjectArn: 'refused',
+  awsDeviceArn: 'refused',
+  awsAppArn: 'refused',
+  awsRegion: 'refused',
+  awsInteractionMode: 'refused',
+} as const;
+
+const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  label: 'BrowserStack',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'consumed',
+    providerDeviceType: 'refused',
+    providerProject: 'consumed',
+    providerBuild: 'consumed',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'consumed',
+    providerGeoLocation: 'consumed',
+    providerTimezone: 'consumed',
+    providerAppiumVersion: 'consumed',
+    providerLanguage: 'consumed',
+    providerLocale: 'consumed',
+    providerNetworkProfile: 'consumed',
+    providerCustomNetwork: 'consumed',
+    providerNoResignApp: 'consumed',
+    ...AWS_DEVICE_FARM_FIELDS_REFUSED,
+  },
+};
+
+const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  label: 'AWS Device Farm',
+  fields: {
+    providerApp: 'refused',
+    providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    awsProjectArn: 'consumed',
+    awsDeviceArn: 'consumed',
+    awsAppArn: 'consumed',
+    awsRegion: 'consumed',
+    awsInteractionMode: 'consumed',
+  },
+};
+
+const TESTMU_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
+  label: 'TestMu AI',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'consumed',
+    providerDeviceType: 'consumed',
+    providerProject: 'consumed',
+    providerBuild: 'consumed',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'consumed',
+    providerGeoLocation: 'consumed',
+    providerTimezone: 'consumed',
+    providerAppiumVersion: 'consumed',
+    providerLanguage: 'consumed',
+    providerLocale: 'consumed',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    ...AWS_DEVICE_FARM_FIELDS_REFUSED,
+  },
+};
+
+/** The profile fields each hub provider reads, for routes that check them before a runtime exists. */
+export const CLOUD_WEBDRIVER_PROFILE_FIELDS: Readonly<
+  Record<CloudWebDriverKnownProviderName, ProviderProfileFieldDeclaration>
+> = {
+  [CLOUD_WEBDRIVER_PROVIDERS.browserStack]: BROWSERSTACK_PROFILE_FIELDS,
+  [CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm]: AWS_DEVICE_FARM_PROFILE_FIELDS,
+  [CLOUD_WEBDRIVER_PROVIDERS.testMu]: TESTMU_PROFILE_FIELDS,
+};
+
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
+  /** Every profile field, consumed or refused; session preparation refuses the refused ones. */
+  profileFields: ProviderProfileFieldDeclaration;
   createRuntime: (env: DefaultCloudWebDriverProviderRuntimeEnv) => CloudWebDriverRuntime;
   listArtifactsFromEnv: (
     providerSessionId: string,
@@ -97,10 +189,12 @@ export function createCloudWebDriverProviderDefinitions(
   return [
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      profileFields: BROWSERSTACK_PROFILE_FIELDS,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+          profileFields: BROWSERSTACK_PROFILE_FIELDS,
           platform: 'android',
           deviceName: 'BrowserStack device',
           endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
@@ -125,10 +219,6 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'BrowserStack');
-            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-            );
             const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
             const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
             const platform = requireRequestPlatform(request, 'BrowserStack');
@@ -208,10 +298,12 @@ export function createCloudWebDriverProviderDefinitions(
     },
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+      profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+          profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
           endpoint: 'http://127.0.0.1/',
           platform: 'android',
           deviceName: 'AWS Device Farm device',
@@ -228,17 +320,6 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'AWS Device Farm');
-            // Enforced here, not only in the CLI profile builder: the typed client and
-            // hand-authored remote-config profiles both reach session preparation without passing
-            // through `connect`, and would otherwise have these capabilities silently dropped.
-            rejectBrowserStackOnlyDeviceFeatures(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-            );
-            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({
@@ -288,10 +369,12 @@ export function createCloudWebDriverProviderDefinitions(
     },
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
+      profileFields: TESTMU_PROFILE_FIELDS,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
+          profileFields: TESTMU_PROFILE_FIELDS,
           platform: 'android',
           deviceName: 'TestMu AI device',
           endpoint: env.TESTMU_WEBDRIVER_ENDPOINT ?? TESTMU_WEBDRIVER_ENDPOINT,
@@ -306,9 +389,7 @@ export function createCloudWebDriverProviderDefinitions(
               buildTestMuDeviceFeatureCapabilities,
               readTestMuDeviceFeatureFields,
               readTestMuDeviceType,
-              rejectUnsupportedTestMuDeviceFeatures,
             } = await loadTestMuDeviceFeatures();
-            rejectUnsupportedTestMuDeviceFeatures(request.flags);
             const deviceType = readTestMuDeviceType(request.flags);
             const uploadEndpoint = testMuAppUploadEndpoint(env, deviceType);
             const credentials = requireTestMuCredentials(env, 'TestMu AI');

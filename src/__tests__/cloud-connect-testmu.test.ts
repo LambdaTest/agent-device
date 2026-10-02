@@ -238,10 +238,8 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'INVALID_ARGS');
-          assert.match(
-            error.message,
-            new RegExp(`--provider-device-type is only supported by TestMu AI, not ${provider}`),
-          );
+          assert.match(error.message, /^--provider-device-type is not supported by /);
+          assert.equal(error.details?.provider, provider);
           return true;
         },
       );
@@ -252,16 +250,29 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
   }
 });
 
-test('connect limrun refuses the TestMu device type', async () => {
+test('connect limrun refuses profile fields Limrun does not read', async () => {
   const result = await runCliCapture(
-    ['connect', 'limrun', '--platform', 'ios', '--provider-device-type', 'real', '--json'],
+    [
+      'connect',
+      'limrun',
+      '--platform',
+      'ios',
+      '--provider-device-type',
+      'real',
+      '--provider-os-version',
+      '18',
+      '--json',
+    ],
     {
       env: { LIMRUN_API_KEY: 'lim_test_key' },
       stateDirPrefix: 'agent-device-connect-limrun-device-type-',
     },
   );
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /--provider-device-type is only supported by TestMu AI, not limrun/);
+  assert.match(
+    result.stdout,
+    /--provider-os-version, --provider-device-type are not supported by Limrun/,
+  );
 });
 
 async function connectWithGeneratedProviderProfile(options: {

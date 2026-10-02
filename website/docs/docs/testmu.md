@@ -105,7 +105,8 @@ agent-device connect testmu \
   pool you connect to; when in doubt, pass the local path or URL and let agent-device upload it.
 - `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` redirects real-device uploads, as
   `TESTMU_APP_UPLOAD_ENDPOINT` does for virtual-device uploads.
-- `--provider-device-type` applies only to TestMu AI; other providers refuse it.
+- `--provider-device-type` applies only to TestMu AI; BrowserStack, AWS Device Farm, and Limrun
+  refuse it on every route, including `client.leases.allocate()`.
 
 ## CLI workflow
 
