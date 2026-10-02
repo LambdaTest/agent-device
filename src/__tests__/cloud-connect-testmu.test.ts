@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
@@ -150,6 +151,119 @@ test('connect testmu rejects BrowserStack network and re-sign flags before savin
   }
 });
 
+test('connect testmu stores and verifies the real-device pool', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-real-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LT_USERNAME', 'lt-user');
+  vi.stubEnv('LT_ACCESS_KEY', 'lt-key');
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: ['testmu'],
+      flags: {
+        platform: 'ios',
+        device: 'iPhone 16',
+        providerOsVersion: '18',
+        providerDeviceType: 'real',
+        providerApp: 'lt://APP1',
+      },
+    });
+
+    assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
+      provider: 'testmu',
+      username: 'lt-user',
+      accessKey: 'lt-key',
+      platform: 'ios',
+      deviceName: 'iPhone 16',
+      osVersion: '18',
+      app: 'lt://APP1',
+      deviceType: 'real',
+    });
+    const state = readRequiredActiveState(stateDir);
+    const generated = readGeneratedConfig(state.remoteConfigPath);
+    assert.equal(generated.providerDeviceType, 'real');
+    assert.equal(generated.providerOsVersion, '18');
+
+    // The saved profile reproduces the same verification when it is loaded again.
+    mockedVerifyWebDriverConnection.mockClear();
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: [],
+      flags: { remoteConfig: state.remoteConfigPath, force: true },
+    });
+    const reloaded = mockedVerifyWebDriverConnection.mock.calls[0]?.[0];
+    assert.equal(reloaded?.provider, 'testmu');
+    assert.equal(reloaded.deviceType, 'real');
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('providers other than TestMu refuse --provider-device-type before saving a profile', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-device-type-reject-');
+  const base = { json: false, help: false, version: false, platform: 'android' as const };
+
+  try {
+    for (const [provider, flags, env] of [
+      [
+        'browserstack',
+        {
+          ...base,
+          device: 'Google Pixel 8',
+          providerOsVersion: '14.0',
+          providerApp: 'bs://app-id',
+        },
+        { BROWSERSTACK_USERNAME: 'u', BROWSERSTACK_ACCESS_KEY: 'k' },
+      ],
+      [
+        'aws-device-farm',
+        {
+          ...base,
+          awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project/p',
+          awsDeviceArn: 'arn:aws:devicefarm:us-west-2::device/d',
+        },
+        {},
+      ],
+    ] as const) {
+      assert.throws(
+        () =>
+          resolveCloudWebDriverConnectProfile({
+            provider,
+            stateDir: path.join(tempRoot, '.state'),
+            cwd: tempRoot,
+            env,
+            flags: { ...flags, providerDeviceType: 'real' },
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.match(
+            error.message,
+            new RegExp(`--provider-device-type is only supported by TestMu AI, not ${provider}`),
+          );
+          return true;
+        },
+      );
+    }
+    assert.equal(fs.existsSync(path.join(tempRoot, '.state')), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect limrun refuses the TestMu device type', async () => {
+  const result = await runCliCapture(
+    ['connect', 'limrun', '--platform', 'ios', '--provider-device-type', 'real', '--json'],
+    {
+      env: { LIMRUN_API_KEY: 'lim_test_key' },
+      stateDirPrefix: 'agent-device-connect-limrun-device-type-',
+    },
+  );
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /--provider-device-type is only supported by TestMu AI, not limrun/);
+});
+
 async function connectWithGeneratedProviderProfile(options: {
   stateDir: string;
   positionals: string[];
@@ -176,11 +290,13 @@ async function connectWithGeneratedProviderProfile(options: {
 function readGeneratedConfig(configPath: string): {
   providerApp?: string;
   providerOsVersion?: string;
+  providerDeviceType?: string;
   providerBuild?: string;
 } {
   return JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
     providerApp?: string;
     providerOsVersion?: string;
+    providerDeviceType?: string;
     providerBuild?: string;
   };
 }

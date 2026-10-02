@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
+import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
@@ -16,16 +17,21 @@ import {
 
 /**
  * TestMu session, upload, and artifact mechanics. Loaded on demand by the provider definition;
- * `isRealMobile: false` in `lt:options` is what routes a session to the virtual-device pool, and
+ * `isRealMobile` in `lt:options` is what routes a session to the real or virtual device pool, and
  * the hostnames still carry the lambdatest.com brand.
  */
-const TESTMU_APP_UPLOAD_ENDPOINT = 'https://manual-api.lambdatest.com/app/upload/virtualDevice';
+const TESTMU_APP_UPLOAD_ENDPOINTS: Record<ProviderDeviceType, string> = {
+  real: 'https://manual-api.lambdatest.com/app/upload/realDevice',
+  virtual: 'https://manual-api.lambdatest.com/app/upload/virtualDevice',
+};
 export const TESTMU_APPS_ENDPOINT = 'https://manual-api.lambdatest.com/app/data';
 export const TESTMU_API_ENDPOINT = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
 const TESTMU_DASHBOARD_TEST_URL = 'https://appautomation.lambdatest.com/test?testID=';
 
 export type TestMuCapabilitiesOptions = {
   platform: CloudWebDriverPlatform;
+  /** Defaults to `virtual`. */
+  deviceType?: ProviderDeviceType;
   deviceName: string;
   osVersion: string;
   app?: string;
@@ -65,6 +71,8 @@ export async function listTestMuCloudArtifacts(
 
 export type TestMuUploadOptions = TestMuAuth & {
   clientVersion: string;
+  /** Selects the pool's upload API when no endpoint override is given; defaults to `virtual`. */
+  deviceType?: ProviderDeviceType;
   endpoint?: string | URL;
 };
 
@@ -78,7 +86,10 @@ export async function uploadTestMuApp(
   if (!(await fs.stat(appPath)).isFile()) {
     throw new AppError('INVALID_ARGS', `TestMu AI can only upload an app file: ${appPath}`, {
       appPath,
-      hint: 'Zip the .app bundle of an iOS simulator build and pass the .zip.',
+      hint:
+        options.deviceType === 'real'
+          ? 'Real iOS devices install a signed .ipa; pass the .ipa file.'
+          : 'Zip the .app bundle of an iOS simulator build and pass the .zip.',
     });
   }
   const form = await appFileUploadForm(appPath, 'appFile');
@@ -109,7 +120,7 @@ async function postTestMuUpload(
     form,
     {
       service: 'TestMu AI',
-      endpoint: options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINT,
+      endpoint: options.endpoint ?? TESTMU_APP_UPLOAD_ENDPOINTS[options.deviceType ?? 'virtual'],
       clientVersion: options.clientVersion,
       auth: options,
       readAppReference: readTestMuAppReference,
@@ -142,11 +153,11 @@ export async function resolveTestMuAppReference(
 }
 
 /**
- * Builds the W3C `alwaysMatch` capabilities for a TestMu virtual-device session.
+ * Builds the W3C `alwaysMatch` capabilities for a TestMu session.
  *
  * Standard Appium keys stay `appium:`-prefixed at the top level; everything TestMu-specific lives
- * in `lt:options`. `isRealMobile: false` selects an emulator or simulator, and `w3c: true` keeps
- * the hub on the W3C dialect agent-device speaks. `appiumVersion` is sent only when the caller
+ * in `lt:options`. `isRealMobile` selects a real device or an emulator/simulator, and `w3c: true`
+ * keeps the hub on the W3C dialect agent-device speaks. `appiumVersion` is sent only when the caller
  * pins one; otherwise TestMu AI starts its default server for the device.
  */
 export function buildTestMuCapabilities(
@@ -173,7 +184,7 @@ export function buildTestMuCapabilities(
       ...deviceFeatures,
       ...(asRecord(configuredLtOptions) ?? {}),
       // A configured value cannot switch the device pool or drop the W3C dialect agent-device speaks.
-      isRealMobile: false,
+      isRealMobile: options.deviceType === 'real',
       w3c: true,
     },
   };

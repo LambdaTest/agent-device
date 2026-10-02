@@ -1,5 +1,6 @@
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
@@ -48,6 +49,7 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
   TESTMU_WEBDRIVER_ENDPOINT?: string;
   TESTMU_APP_UPLOAD_ENDPOINT?: string;
+  TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
@@ -57,15 +59,15 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
 };
 
 /**
- * TestMu (formerly LambdaTest) virtual devices: emulators and simulators behind one Appium hub.
- * Only what `createRuntime` needs synchronously lives here; the session, upload, and artifact
- * code loads on first use so the package entry stays as lean as it was.
+ * TestMu (formerly LambdaTest) real devices, and virtual devices (emulators and simulators), behind
+ * one Appium hub. Only what `createRuntime` needs synchronously lives here; the session,
+ * upload, and artifact code loads on first use so the package entry stays as lean as it was.
  */
 const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
 const TESTMU_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
-    note: 'Local app artifacts are uploaded to TestMu AI as virtual-device apps (lt://), then installed with Appium.',
+    note: 'Local app artifacts are uploaded to TestMu AI as real- or virtual-device apps (lt://), then installed with Appium.',
   },
   portReverse: {
     support: 'unsupported',
@@ -123,6 +125,10 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'BrowserStack');
+            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+            );
             const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
             const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
             const platform = requireRequestPlatform(request, 'BrowserStack');
@@ -229,6 +235,10 @@ export function createCloudWebDriverProviderDefinitions(
               request.flags,
               CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
             );
+            (await loadTestMuDeviceFeatures()).rejectTestMuOnlyProviderFlags(
+              request.flags,
+              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({
@@ -295,9 +305,12 @@ export function createCloudWebDriverProviderDefinitions(
             const {
               buildTestMuDeviceFeatureCapabilities,
               readTestMuDeviceFeatureFields,
+              readTestMuDeviceType,
               rejectUnsupportedTestMuDeviceFeatures,
             } = await loadTestMuDeviceFeatures();
             rejectUnsupportedTestMuDeviceFeatures(request.flags);
+            const deviceType = readTestMuDeviceType(request.flags);
+            const uploadEndpoint = testMuAppUploadEndpoint(env, deviceType);
             const credentials = requireTestMuCredentials(env, 'TestMu AI');
             const platform = requireRequestPlatform(request, 'TestMu AI');
             const deviceName = requireFlag(
@@ -313,7 +326,8 @@ export function createCloudWebDriverProviderDefinitions(
             const upload = {
               clientVersion: dependencies.clientVersion,
               ...credentials,
-              endpoint: env.TESTMU_APP_UPLOAD_ENDPOINT,
+              deviceType,
+              endpoint: uploadEndpoint,
             };
             const app = await resolveTestMuAppReference(
               requireFlag(
@@ -331,6 +345,7 @@ export function createCloudWebDriverProviderDefinitions(
               uploadApp: createTestMuUploadApp(upload),
               webdriverCapabilities: buildTestMuCapabilities({
                 platform,
+                deviceType,
                 deviceName,
                 osVersion,
                 app,
@@ -372,6 +387,16 @@ function requireTestMuCredentials(
     username: requireEnv(env, 'LT_USERNAME', providerLabel),
     accessKey: requireEnv(env, 'LT_ACCESS_KEY', providerLabel),
   };
+}
+
+/** Each pool has its own upload API, so each has its own override. */
+function testMuAppUploadEndpoint(
+  env: DefaultCloudWebDriverProviderRuntimeEnv,
+  deviceType: ProviderDeviceType,
+): string | undefined {
+  return deviceType === 'real'
+    ? env.TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT
+    : env.TESTMU_APP_UPLOAD_ENDPOINT;
 }
 
 function requireRequest(

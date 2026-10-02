@@ -1,5 +1,8 @@
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
-import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
+import type {
+  ProviderConnectionVerification,
+  ProviderDeviceType,
+} from '@agent-device/contracts/remote';
 import { verifyAwsDeviceFarmConnection } from './aws-device-farm-connection-verification.ts';
 import { verifyBrowserStackConnection } from './browserstack-connection-verification.ts';
 
@@ -38,6 +41,8 @@ export type CloudWebDriverConnectionVerificationOptions =
   | (HubSelectionVerificationOptions & { provider: 'browserstack' })
   | (HubSelectionVerificationOptions & {
       provider: 'testmu';
+      /** Defaults to `virtual`. */
+      deviceType?: ProviderDeviceType;
       /** Base of the catalog API, as `TESTMU_API_ENDPOINT` sets it for the runtime. */
       apiEndpoint?: string | URL;
     })
