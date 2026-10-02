@@ -6,13 +6,13 @@ import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.
 import { AppError } from '@agent-device/kernel/errors';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
+  appendUrlPath,
   appFileUploadForm,
   asRecord,
   createHubUploadApp,
   fetchProviderSessionDetails,
   postHubAppUpload,
   resolveHubAppReference,
-  trimTrailingSlash,
 } from './webdriver-utils.ts';
 
 /**
@@ -83,7 +83,9 @@ export async function uploadTestMuApp(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
-  if (!(await fs.stat(appPath)).isFile()) {
+  // A missing path is the same caller mistake as a directory, so both get the typed refusal.
+  const stat = await fs.stat(appPath).catch(() => undefined);
+  if (!stat?.isFile()) {
     throw new AppError('INVALID_ARGS', `TestMu AI can only upload an app file: ${appPath}`, {
       appPath,
       hint:
@@ -146,6 +148,7 @@ export async function resolveTestMuAppReference(
     cwd: options.cwd,
     referenceScheme: 'lt://',
     referenceLabel: 'an lt:// app id',
+    isReference: isTestMuAppReference,
     uploadFile: async (appPath, signal) => await uploadTestMuApp(appPath, options, signal),
     uploadUrl: async (url, signal) => await uploadTestMuAppFromUrl(url, options, signal),
     signal: options.signal,
@@ -190,16 +193,24 @@ export function buildTestMuCapabilities(
   };
 }
 
+const TESTMU_APP_REFERENCE = /^lt:\/\/[\w.-]+$/;
+
 export function isTestMuAppReference(value: string): boolean {
-  return value.startsWith('lt://');
+  return TESTMU_APP_REFERENCE.test(value);
+}
+
+/** The upload and app-list APIs answer with a bare app id or an `lt://` reference. */
+export function testMuAppReferenceFromId(id: string): string {
+  return id.startsWith('lt://') ? id : `lt://${id}`;
 }
 
 async function fetchTestMuSessionDetails(
   sessionId: string,
   options: TestMuSessionDetailsOptions,
 ): Promise<Record<string, unknown>> {
-  const endpoint = new URL(
-    `${trimTrailingSlash(String(options.endpoint ?? TESTMU_API_ENDPOINT))}/sessions/${encodeURIComponent(sessionId)}`,
+  const endpoint = appendUrlPath(
+    options.endpoint ?? TESTMU_API_ENDPOINT,
+    `sessions/${encodeURIComponent(sessionId)}`,
   );
   let json: Record<string, unknown>;
   try {
@@ -259,17 +270,11 @@ function mapTestMuArtifacts(
   return ready.length > 0 ? [...ready, dashboard] : [];
 }
 
-const TESTMU_APP_ID = /^[\w.-]+$/;
-
 /** The upload answers with `app_url` (`lt://…`) and/or a bare `app_id`; anything else is a failed upload. */
 function readTestMuAppReference(value: unknown): string | undefined {
   const { app_url: appUrl, app_id: appId } = asRecord(value) ?? {};
-  if (typeof appUrl === 'string' && isValidTestMuAppReference(appUrl)) return appUrl;
+  if (typeof appUrl === 'string' && isTestMuAppReference(appUrl)) return appUrl;
   if (typeof appId !== 'string') return undefined;
-  const reference = isTestMuAppReference(appId) ? appId : `lt://${appId}`;
-  return isValidTestMuAppReference(reference) ? reference : undefined;
-}
-
-function isValidTestMuAppReference(value: string): boolean {
-  return isTestMuAppReference(value) && TESTMU_APP_ID.test(value.slice('lt://'.length));
+  const reference = testMuAppReferenceFromId(appId);
+  return isTestMuAppReference(reference) ? reference : undefined;
 }

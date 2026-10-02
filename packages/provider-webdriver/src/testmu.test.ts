@@ -244,6 +244,20 @@ test('TestMu upload rejects an unzipped .app bundle before calling the upload AP
   }
 });
 
+// The install adapter reaches the upload without the resolver's existence check in front of it.
+test('TestMu upload of a missing path fails typed, not with a bare ENOENT', async () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  globalThis.fetch = fetchMock;
+  await assert.rejects(uploadTestMuApp('/nonexistent/App.apk', auth), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'INVALID_ARGS');
+    assert.equal(error.message, 'TestMu AI can only upload an app file: /nonexistent/App.apk');
+    assert.ok(error.details?.hint);
+    return true;
+  });
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
 test('the install adapter uploads the local build and launches the hinted app id', async () => {
   const tempDir = await mkdtempForTest('agent-device-testmu-install-');
   const appPath = path.join(tempDir, 'Demo.apk');
@@ -277,6 +291,14 @@ test('TestMu passes lt:// ids through and has the upload API fetch a public URL'
     return jsonResponse({ app_id: 'APP9' });
   };
   assert.equal(await resolveTestMuAppReference('lt://APP1', auth), 'lt://APP1');
+  assert.equal(await resolveTestMuAppReference('LT://APP1', auth), 'lt://APP1');
+  await assert.rejects(
+    resolveTestMuAppReference('lt://', auth),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /--provider-app lt:\/\/ is not an lt:\/\/ app id/.test(error.message),
+  );
   assert.equal(forms.length, 0);
   assert.equal(
     await resolveTestMuAppReference('https://builds.example/App.apk', auth),
@@ -346,9 +368,10 @@ test('TestMu artifacts come from the jsend session payload and stay pending unti
       status: 'success',
       data: {
         test_id: 'SESSION1',
-        video_url: 'https://cdn.test/video.mp4',
+        video_url: '  https://cdn.test/video.mp4\n',
         appium_logs_url: 'https://api.test/sessions/SESSION1/log/appium',
         device_logs_url: '',
+        network_logs_url: '   ',
       },
     });
   };
@@ -356,7 +379,14 @@ test('TestMu artifacts come from the jsend session payload and stay pending unti
     ...auth,
     endpoint: 'https://api.test/mobile-automation/api/v1/',
   });
-  assert.deepEqual(calls, ['https://api.test/mobile-automation/api/v1/sessions/SESSION1']);
+  await listTestMuCloudArtifacts('testmu', 'SESSION 2', {
+    ...auth,
+    endpoint: 'https://api.test/mobile-automation/api/v1?region=eu',
+  });
+  assert.deepEqual(calls, [
+    'https://api.test/mobile-automation/api/v1/sessions/SESSION1',
+    'https://api.test/mobile-automation/api/v1/sessions/SESSION%202?region=eu',
+  ]);
   assert.equal(result?.status, 'ready');
   assert.deepEqual(
     result?.cloudArtifacts.map((artifact) => [artifact.kind, artifact.url]),

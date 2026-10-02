@@ -172,7 +172,15 @@ function hubProviderProfileFields(
 }
 
 function normalizeHubAppReference(hub: HubProviderProfile, app: string, cwd: string): string {
-  if (app.startsWith(hub.appScheme) || /^https?:\/\//i.test(app)) return app;
+  if (/^https?:\/\//i.test(app)) return app;
+  // URI schemes are case-insensitive; the hub only matches the lower-case spelling.
+  if (app.slice(0, hub.appScheme.length).toLowerCase() === hub.appScheme) {
+    const id = app.slice(hub.appScheme.length);
+    if (id.length > 0) return `${hub.appScheme}${id}`;
+    throw new AppError('INVALID_ARGS', `${hub.command} --provider-app ${app} has no app id.`, {
+      hint: `Pass ${hub.appHint}.`,
+    });
+  }
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;

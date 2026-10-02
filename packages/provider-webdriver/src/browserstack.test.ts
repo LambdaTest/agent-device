@@ -135,3 +135,19 @@ test('BrowserStack session details lookup has a deadline and fails typed', async
     });
   }
 });
+
+test('BrowserStack session details keep a query on the endpoint override', async () => {
+  const calls: string[] = [];
+  globalThis.fetch = async (input) => {
+    calls.push(String(input));
+    return new Response(JSON.stringify({ automation_session: { video_url: ' ' } }), {
+      status: 200,
+    });
+  };
+  const result = await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', {
+    ...upload,
+    endpoint: 'https://api.example.test/sessions?region=eu',
+  });
+  assert.deepEqual(calls, ['https://api.example.test/sessions/SESSION1.json?region=eu']);
+  assert.equal(result?.status, 'pending');
+});

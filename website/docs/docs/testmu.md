@@ -35,14 +35,17 @@ hub rejects `--provider-os-version 18` for a device listed with `18.0`, so `conn
 lists the versions the device offers.
 
 `--provider-app` accepts a TestMu AI app reference such as `lt://APP...`, an HTTP(S) app URL, or
-an existing local app path (`.apk`, or a zipped simulator `.app` for iOS). TestMu AI uploads a local
-path or fetches a URL when it creates the hosted session, through the virtual-device upload API.
+an existing local app path (`.apk`, or a zipped simulator `.app` for iOS). When `open` creates the
+hosted session, agent-device uploads a local path, and TestMu AI fetches a URL, through the
+virtual-device upload API.
 
 During `connect`, agent-device checks the device/OS pair against TestMu AI's virtual-device
 catalog (`/capability/generator?isVirtualDevice=true`), verifies the credentials against your
-uploaded-app listing, matches an `lt://` reference against that listing, and confirms that a local
-artifact exists before saving its absolute path. `open` still needs the app's installed package or
-bundle identifier, not the upload name or `lt://` id.
+uploaded-app listing, looks an `lt://` reference up in that listing, and confirms that a local
+artifact exists before saving its absolute path. `connect` does not prove the app usable: an `lt://`
+id missing from the listing is still accepted, and TestMu AI validates it, like a URL or local
+upload, only when the session is created. `open` still needs the app's installed package or bundle
+identifier, not the upload name or `lt://` id.
 
 Optional labels:
 

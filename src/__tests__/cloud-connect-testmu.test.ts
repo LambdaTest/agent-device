@@ -85,6 +85,44 @@ test('connect testmu generates a local provider profile and verifies the virtual
   }
 });
 
+test('connect canonicalizes an upper-case app scheme and refuses an empty app id', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-app-scheme-');
+  const base = { json: false, help: false, version: false, platform: 'ios' as const };
+  const connect = (provider: 'testmu' | 'browserstack', providerApp: string) =>
+    resolveCloudWebDriverConnectProfile({
+      provider,
+      stateDir: path.join(tempRoot, `.state-${provider}`),
+      cwd: tempRoot,
+      env: {
+        LT_USERNAME: 'u',
+        LT_ACCESS_KEY: 'k',
+        BROWSERSTACK_USERNAME: 'u',
+        BROWSERSTACK_ACCESS_KEY: 'k',
+      },
+      flags: { ...base, device: 'iPhone 16', providerOsVersion: '18.0', providerApp },
+    });
+
+  try {
+    assert.equal(
+      readGeneratedConfig(connect('testmu', 'LT://APP1').remoteConfigPath).providerApp,
+      'lt://APP1',
+    );
+    assert.equal(
+      readGeneratedConfig(connect('browserstack', 'Bs://abc').remoteConfigPath).providerApp,
+      'bs://abc',
+    );
+    assert.throws(
+      () => connect('testmu', 'lt://'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        /--provider-app lt:\/\/ has no app id/.test(error.message),
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect testmu verifies against TESTMU_API_ENDPOINT', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-endpoint-');
   vi.stubEnv('LT_USERNAME', 'lt-user');

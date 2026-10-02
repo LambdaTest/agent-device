@@ -3,13 +3,13 @@ import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 import {
+  appendUrlPath,
   appFileUploadForm,
   asRecord,
   createHubUploadApp,
   fetchProviderSessionDetails,
   postHubAppUpload,
   resolveHubAppReference,
-  trimTrailingSlash,
 } from './webdriver-utils.ts';
 
 export const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
@@ -151,8 +151,9 @@ async function fetchBrowserStackSessionDetails(
   sessionId: string,
   options: BrowserStackSessionDetailsOptions,
 ): Promise<Record<string, unknown>> {
-  const endpoint = new URL(
-    `${trimTrailingSlash(String(options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT))}/${sessionId}.json`,
+  const endpoint = appendUrlPath(
+    options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
+    `${sessionId}.json`,
   );
   const json = await fetchProviderSessionDetails(endpoint, {
     clientVersion: options.clientVersion,

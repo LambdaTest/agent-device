@@ -56,6 +56,13 @@ export function trimTrailingSlash(value: string): string {
   return lastNonSlash === value.length - 1 ? value : value.slice(0, lastNonSlash + 1);
 }
 
+/** Appends `route` to the base's path; a query on the base is kept rather than swallowing the route. */
+export function appendUrlPath(base: string | URL, route: string): URL {
+  const url = new URL(base);
+  url.pathname = `${trimTrailingSlash(url.pathname)}/${route}`;
+  return url;
+}
+
 export function withTrailingSlash(url: URL): URL {
   if (url.pathname.endsWith('/')) return url;
   const copy = new URL(url);
@@ -141,24 +148,53 @@ export async function resolveHubAppReference(options: {
   referenceScheme: string;
   /** How the scheme reads in the error message, e.g. `a bs:// app id`. */
   referenceLabel: string;
+  /** Validates a canonical reference; by default any non-empty id after the scheme is accepted. */
+  isReference?: (reference: string) => boolean;
   uploadFile: (appPath: string, signal?: AbortSignal) => Promise<string>;
   uploadUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
   signal?: AbortSignal;
 }): Promise<string> {
   const { app } = options;
-  if (app.startsWith(options.referenceScheme)) return app;
+  const reference = canonicalHubAppReference(app, options.referenceScheme);
+  if (reference !== undefined) {
+    const isReference =
+      options.isReference ?? ((value: string) => value.length > options.referenceScheme.length);
+    if (isReference(reference)) return reference;
+    throw new AppError(
+      'INVALID_ARGS',
+      `${options.service} --provider-app ${app} is not ${options.referenceLabel}.`,
+      { providerApp: app },
+    );
+  }
   if (/^https?:\/\//i.test(app)) {
     return options.uploadUrl ? await options.uploadUrl(app, options.signal) : app;
   }
   const appPath = path.resolve(options.cwd ?? process.cwd(), app);
-  if (!fs.existsSync(appPath)) {
+  const stat = fs.statSync(appPath, { throwIfNoEntry: false });
+  if (!stat) {
     throw new AppError(
       'INVALID_ARGS',
       `${options.service} --provider-app must be ${options.referenceLabel}, URL, or existing local app path.`,
       { providerApp: app },
     );
   }
+  if (!stat.isFile()) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${options.service} --provider-app must be an app file, not a directory: ${appPath}`,
+      {
+        providerApp: app,
+        hint: 'Zip an iOS simulator .app bundle and pass the .zip, or pass the .ipa, .apk, or .aab.',
+      },
+    );
+  }
   return await options.uploadFile(appPath, options.signal);
+}
+
+/** URI schemes are case-insensitive, so `LT://id` is the hub reference `lt://id`. */
+function canonicalHubAppReference(app: string, scheme: string): string | undefined {
+  if (app.slice(0, scheme.length).toLowerCase() !== scheme) return undefined;
+  return `${scheme}${app.slice(scheme.length)}`;
 }
 
 const PROVIDER_API_TIMEOUT_MS = 15_000;
@@ -167,13 +203,16 @@ const PROVIDER_API_TIMEOUT_MS = 15_000;
 export type ProviderJsonFailureHints = {
   service: string;
   unauthorizedHint: string;
+  /** For any other non-2xx answer, or a 2xx answer that is not JSON. */
+  serviceHint: string;
   networkHint: string;
 };
 
 /**
  * Fetches JSON from a hosted provider's API during connection verification. A 401/403 is
- * `UNAUTHORIZED` with a credential hint, any other non-2xx is `COMMAND_FAILED`, and a transport
- * failure is wrapped so its cause survives without leaking the credentials.
+ * `UNAUTHORIZED` with a credential hint, any other non-2xx or a body that is not JSON is
+ * `COMMAND_FAILED` with the status, and a transport failure is wrapped so its cause survives
+ * without leaking the credentials.
  */
 export async function fetchProviderVerificationJson(
   endpoint: string | URL,
@@ -183,7 +222,7 @@ export async function fetchProviderVerificationJson(
     hints: ProviderJsonFailureHints;
   },
 ): Promise<unknown> {
-  const { service, unauthorizedHint, networkHint } = options.hints;
+  const { service, unauthorizedHint, serviceHint, networkHint } = options.hints;
   try {
     const response = await fetch(endpoint, {
       headers: {
@@ -199,13 +238,19 @@ export async function fetchProviderVerificationJson(
         `${service} rejected connection verification.`,
         {
           status: response.status,
-          hint: unauthorized
-            ? unauthorizedHint
-            : `Retry connect or check the ${service} service status.`,
+          hint: unauthorized ? unauthorizedHint : serviceHint,
         },
       );
     }
-    return (await response.json()) as unknown;
+    const json = await readProviderJsonBody(response);
+    if (json === undefined) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `${service} connection verification answer was not JSON.`,
+        { status: response.status, hint: serviceHint },
+      );
+    }
+    return json;
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError(

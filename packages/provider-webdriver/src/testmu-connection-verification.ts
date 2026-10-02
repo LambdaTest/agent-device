@@ -1,7 +1,12 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { asRecord, fetchProviderVerificationJson, trimTrailingSlash } from './webdriver-utils.ts';
-import { TESTMU_API_ENDPOINT, TESTMU_APPS_ENDPOINT, isTestMuAppReference } from './testmu.ts';
+import { appendUrlPath, asRecord, fetchProviderVerificationJson } from './webdriver-utils.ts';
+import {
+  TESTMU_API_ENDPOINT,
+  TESTMU_APPS_ENDPOINT,
+  isTestMuAppReference,
+  testMuAppReferenceFromId,
+} from './testmu.ts';
 import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
@@ -34,7 +39,7 @@ export async function verifyTestMuConnection(
   const deviceType = options.deviceType ?? 'virtual';
   const catalogUrl = options.devicesEndpoint
     ? new URL(options.devicesEndpoint)
-    : apiUrl(options.apiEndpoint ?? TESTMU_API_ENDPOINT, 'capability/generator');
+    : appendUrlPath(options.apiEndpoint ?? TESTMU_API_ENDPOINT, 'capability/generator');
   catalogUrl.searchParams.set('isVirtualDevice', String(deviceType === 'virtual'));
   const catalog = await fetchTestMuJson(catalogUrl, undefined, clientVersion);
   const namedDevices = readTestMuCatalogDevices(catalog, options.platform, deviceType).filter(
@@ -118,13 +123,6 @@ async function verifyTestMuApp(
   };
 }
 
-/** Appends `route` to the base's path; the base may carry a query, which is kept. */
-function apiUrl(base: string | URL, route: string): URL {
-  const url = new URL(base);
-  url.pathname = `${trimTrailingSlash(url.pathname)}/${route}`;
-  return url;
-}
-
 async function fetchTestMuJson(
   endpoint: string | URL,
   auth: TestMuAuth | undefined,
@@ -136,6 +134,7 @@ async function fetchTestMuJson(
     hints: {
       service: 'TestMu AI',
       unauthorizedHint: 'Check LT_USERNAME and LT_ACCESS_KEY.',
+      serviceHint: 'Retry connect or check the TestMu AI service status.',
       networkHint:
         'Check network access to mobile-api.lambdatest.com and manual-api.lambdatest.com, then retry connect.',
     },
@@ -189,7 +188,7 @@ function readTestMuApps(
   return data.flatMap((entry) => {
     const app = asRecord(entry);
     if (!app || typeof app.app_id !== 'string') return [];
-    const reference = isTestMuAppReference(app.app_id) ? app.app_id : `lt://${app.app_id}`;
+    const reference = testMuAppReferenceFromId(app.app_id);
     return [
       {
         reference,
