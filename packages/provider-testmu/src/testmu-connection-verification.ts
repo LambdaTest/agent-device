@@ -1,6 +1,10 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { appendUrlPath, asRecord, fetchProviderVerificationJson } from './webdriver-utils.ts';
+import {
+  appendUrlPath,
+  asRecord,
+  fetchProviderVerificationJson,
+} from '@agent-device/provider-webdriver/plugin';
 import {
   TESTMU_API_ENDPOINT,
   TESTMU_APPS_ENDPOINT,
@@ -8,15 +12,24 @@ import {
   testMuAppReferenceFromId,
 } from './testmu.ts';
 import type {
-  CloudWebDriverConnectionVerification,
-  CloudWebDriverConnectionVerificationOptions,
-} from './connection-verification.ts';
-import type {
+  ProviderConnectionVerification,
   ProviderConnectionResource,
   ProviderDeviceType,
 } from '@agent-device/contracts/remote';
 
-type TestMuOptions = Extract<CloudWebDriverConnectionVerificationOptions, { provider: 'testmu' }>;
+export type TestMuOptions = {
+  provider: 'testmu';
+  username: string;
+  accessKey: string;
+  platform: 'android' | 'ios';
+  deviceName: string;
+  osVersion: string;
+  app: string;
+  deviceType?: ProviderDeviceType;
+  apiEndpoint?: string | URL;
+  devicesEndpoint?: string | URL;
+  appsEndpoint?: string | URL;
+};
 
 type TestMuAuth = { username: string; accessKey: string };
 
@@ -34,7 +47,7 @@ const TESTMU_APP_LIST_TYPES: Record<ProviderDeviceType, Record<'android' | 'ios'
 export async function verifyTestMuConnection(
   options: TestMuOptions,
   clientVersion: string,
-): Promise<CloudWebDriverConnectionVerification> {
+): Promise<ProviderConnectionVerification> {
   const auth = { username: options.username, accessKey: options.accessKey };
   const deviceType = options.deviceType ?? 'virtual';
   const catalogUrl = options.devicesEndpoint

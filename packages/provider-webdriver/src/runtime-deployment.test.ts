@@ -3,7 +3,6 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createTestMuUploadApp } from './testmu.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { createWebDriverDeploymentRuntime } from './runtime-deployment.ts';
 import type { WebDriverProviderSession } from './runtime-session.ts';
@@ -175,51 +174,6 @@ test('a provider without an uploader still installs the materialized bundle path
     new AbortController().signal,
   );
   expect(installApp).toHaveBeenCalledWith('/m/extracted/App.app', expect.any(AbortSignal));
-});
-
-test('TestMu uploads the zipped simulator build that install-from-source extracted', async () => {
-  const tempDir = await mkdtempForTest('agent-device-materialized-upload-');
-  try {
-    const archivePath = path.join(tempDir, 'App.app.zip');
-    const installablePath = path.join(tempDir, 'extracted', 'App.app');
-    await fs.writeFile(archivePath, 'zip bytes');
-    await fs.mkdir(installablePath, { recursive: true });
-    const uploadedNames: unknown[] = [];
-    globalThis.fetch = async (_input, init) => {
-      const body = init?.body;
-      if (!(body instanceof FormData)) throw new Error('expected a multipart upload');
-      uploadedNames.push((body.get('appFile') as File).name);
-      return new Response(JSON.stringify({ app_id: 'APP42' }), { status: 200 });
-    };
-    const installApp = vi.fn(async () => undefined);
-    const deployment = createWebDriverDeploymentRuntime({
-      provider: 'testmu',
-      uploadApp: createTestMuUploadApp({
-        clientVersion: '0.0.0-test',
-        username: 'user',
-        accessKey: 'key',
-      }),
-      findSessionForDevice: () => activeSession(installApp),
-    });
-
-    await deployment.deployMaterializedApp(
-      iosDevice,
-      {
-        artifact: {
-          archivePath,
-          installablePath,
-          uploadPath: archivePath,
-          cleanup: async () => {},
-        },
-      },
-      new AbortController().signal,
-    );
-
-    expect(uploadedNames).toEqual(['App.app.zip']);
-    expect(installApp).toHaveBeenCalledWith('lt://APP42', expect.any(AbortSignal));
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  }
 });
 
 function activeSession(

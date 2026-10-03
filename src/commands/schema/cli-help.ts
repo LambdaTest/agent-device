@@ -619,6 +619,7 @@ Cloud profile flow:
   agent-device disconnect
 
 TestMu AI virtual-device flow (emulators and simulators):
+  agent-device plugins add @agent-device/testmu
   LT_USERNAME=... LT_ACCESS_KEY=...
   agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app lt://APP-id
   agent-device open com.example.app

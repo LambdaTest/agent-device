@@ -23,6 +23,10 @@ import {
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
 
+import testMuPlugin from '../../../packages/provider-testmu/src/plugin.ts';
+import { createPluginHost } from '../../../src/plugins/host.ts';
+import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
+
 const CLIENT_VERSION = '0.20.3-test';
 
 test('BrowserStack facade prepares capabilities, uploads apps, and returns artifacts', async () => {
@@ -187,21 +191,23 @@ test('AWS Device Farm facade rejects device features it does not read at session
 
 test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: unexpectedHostCommand,
-    });
-    const runtime = runtimeFor(
-      provider.createDefaultRuntimes({
-        LT_USERNAME: 'user',
-        LT_ACCESS_KEY: 'key',
-        TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-        TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-        TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
-      }),
-      CLOUD_WEBDRIVER_PROVIDERS.testMu,
+    const registration = testMuPlugin(
+      createPluginHost(
+        {
+          LT_USERNAME: 'user',
+          LT_ACCESS_KEY: 'key',
+          TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+          TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
+        },
+        undefined,
+      ),
     );
-    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.testMu);
+    const runtime = createCloudWebDriverRuntime({
+      ...registration.webDriver,
+      clientVersion: CLIENT_VERSION,
+    });
+    const lease = makeLease('testmu');
     try {
       await runtime.leaseLifecycle.allocate?.(lease, {
         flags: {

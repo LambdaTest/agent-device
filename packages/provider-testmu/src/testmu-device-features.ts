@@ -4,7 +4,7 @@ import {
   type ProviderDeviceType,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireProviderDeviceOrientation } from './webdriver-utils.ts';
+import { requireProviderDeviceOrientation } from '@agent-device/provider-webdriver/plugin';
 
 /**
  * TestMu "device feature" session capabilities: the hosted-provider flags TestMu can act on,

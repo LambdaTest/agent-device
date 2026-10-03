@@ -4,10 +4,7 @@ import {
   readAwsDeviceFarmRegionFromArn,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
-import {
-  isBrowserStackAppReference,
-  isTestMuAppReference,
-} from '@agent-device/provider-webdriver/providers';
+import { isBrowserStackAppReference } from '@agent-device/provider-webdriver/providers';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -85,10 +82,6 @@ const CLOUD_WEBDRIVER_CONNECT_PROFILE_BUILDERS: readonly {
     provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
     buildProfileFields: awsDeviceFarmProfileFields,
   },
-  {
-    provider: CLOUD_WEBDRIVER_PROVIDERS.testMu,
-    buildProfileFields: testMuProfileFields,
-  },
 ];
 
 function requireConnectProfileBuilder(
@@ -122,32 +115,12 @@ const BROWSERSTACK_HUB_PROFILE: HubProviderProfile = {
   appHint: '<bs://app-id-or-local-path>',
 };
 
-const TESTMU_HUB_PROFILE: HubProviderProfile = {
-  command: 'connect testmu',
-  label: 'TestMu AI',
-  credentialEnv: ['LT_USERNAME', 'LT_ACCESS_KEY'],
-  appScheme: 'lt://',
-  isAppReference: isTestMuAppReference,
-  appHint: '<lt://app-id, URL, or local path>',
-};
-
 function browserStackProfileFields(options: {
   flags: CliFlags;
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
   return hubProviderProfileFields(BROWSERSTACK_HUB_PROFILE, options);
-}
-
-function testMuProfileFields(options: {
-  flags: CliFlags;
-  env?: EnvMap;
-  cwd: string;
-}): RemoteConfigProfile {
-  return {
-    ...hubProviderProfileFields(TESTMU_HUB_PROFILE, options),
-    providerDeviceType: options.flags.providerDeviceType,
-  };
 }
 
 function hubProviderProfileFields(

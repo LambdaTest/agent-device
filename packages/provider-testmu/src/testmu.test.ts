@@ -11,7 +11,7 @@ import {
   uploadTestMuApp,
   uploadTestMuAppFromUrl,
 } from './testmu.ts';
-import { buildCloudWebDriverBaseCapabilities } from './runtime.ts';
+import { buildCloudWebDriverBaseCapabilities } from '@agent-device/provider-webdriver/plugin';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const realFetch = globalThis.fetch;

@@ -4,7 +4,6 @@ import type { ProviderProfileField } from '@agent-device/contracts/provider-prof
 import { CLOUD_WEBDRIVER_PROFILE_FIELDS } from './provider-definitions.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { BROWSERSTACK_DEVICE_FEATURE_SPECS } from './browserstack-device-features.ts';
-import { TESTMU_DEVICE_FEATURE_SPECS } from './testmu-device-features.ts';
 
 // Fields a hub reads directly while building its session, outside the device-feature tables.
 const HUB_SESSION_FIELDS: readonly ProviderProfileField[] = [
@@ -37,10 +36,6 @@ test('hub declarations consume exactly the fields their capability builders read
       ...HUB_SESSION_FIELDS.filter((field) => field !== 'providerDeviceType'),
       ...BROWSERSTACK_DEVICE_FEATURE_SPECS.map((spec) => spec.field),
     ].sort(),
-  );
-  assert.deepEqual(
-    consumedFields(CLOUD_WEBDRIVER_PROVIDERS.testMu),
-    [...HUB_SESSION_FIELDS, ...TESTMU_DEVICE_FEATURE_SPECS.map((spec) => spec.field)].sort(),
   );
 });
 

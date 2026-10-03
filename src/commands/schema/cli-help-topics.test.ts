@@ -440,6 +440,7 @@ test('usageForCommand resolves remote help topic', async () => {
     help,
     /Limrun, BrowserStack, AWS Device Farm, and TestMu AI through local provider profiles/,
   );
+  assert.match(help, /plugins add @agent-device\/testmu/);
   assert.match(help, /TestMu AI uses LT_USERNAME and LT_ACCESS_KEY/);
   const testMuFlow = help.slice(
     help.indexOf('TestMu AI virtual-device flow'),

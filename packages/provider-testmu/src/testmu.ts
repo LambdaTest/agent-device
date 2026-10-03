@@ -2,10 +2,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
-import type { CloudWebDriverPlatform, CloudWebDriverUploadApp } from './runtime.ts';
+import type {
+  CloudWebDriverPlatform,
+  CloudWebDriverUploadApp,
+} from '@agent-device/provider-webdriver/plugin';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTestMuAppReference } from './providers.ts';
-import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
+import {
+  cloudArtifactsReadyOrPending,
+  urlArtifactFromDetails,
+} from '@agent-device/provider-webdriver/plugin';
 import {
   appendUrlPath,
   appFileUploadForm,
@@ -14,7 +20,7 @@ import {
   fetchProviderSessionDetails,
   postHubAppUpload,
   resolveHubAppReference,
-} from './webdriver-utils.ts';
+} from '@agent-device/provider-webdriver/plugin';
 
 /**
  * TestMu session, upload, and artifact mechanics. Loaded on demand by the provider definition;

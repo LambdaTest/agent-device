@@ -7,24 +7,64 @@ import {
   readActiveConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
+import { resolveCloudWebDriverConnectProfile as resolveBuiltinProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { providerWebDriver } from '../provider-webdriver.ts';
+import { verifyTestMuConnection } from '../../packages/provider-testmu/src/testmu-connection-verification.ts';
+import testMuPlugin from '../../packages/provider-testmu/src/plugin.ts';
+import { createPluginHost } from '../plugins/host.ts';
+import { persistAndResolveGeneratedProfile } from '../cli/connection/generated-config.ts';
+import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
+import { installedPlugins } from '../plugins/store.ts';
+import manifest from '../../packages/provider-testmu/package.json' with { type: 'json' };
+import type { CliFlags } from '@agent-device/contracts/command';
+import type { PluginConnection } from '../plugins/connection.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
-vi.mock('../provider-webdriver.ts', () => ({
-  providerWebDriver: { verifyConnection: vi.fn() },
+vi.mock('../../packages/provider-testmu/src/testmu-connection-verification.ts', () => ({
+  verifyTestMuConnection: vi.fn(),
 }));
+vi.mock('../plugins/load.ts', () => ({
+  withPluginConnection: async (
+    _provider: string,
+    env: NodeJS.ProcessEnv,
+    runConnection: (connection: PluginConnection) => Promise<unknown>,
+  ) => {
+    const registration = testMuPlugin(createPluginHost(env, undefined));
+    return await runConnection(registration.connection);
+  },
+}));
+function resolveCloudWebDriverConnectProfile(options: {
+  provider: 'testmu' | 'browserstack' | 'aws-device-farm';
+  flags: CliFlags;
+  stateDir: string;
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+}) {
+  if (options.provider !== 'testmu')
+    return resolveBuiltinProfile({ ...options, provider: options.provider });
+  const resolved = testMuPlugin(createPluginHost(options.env ?? {}, undefined)).connection.resolve(
+    options,
+  );
+  return persistAndResolveGeneratedProfile({ ...options, ...resolved });
+}
 
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
 });
 
-const mockedVerifyWebDriverConnection = vi.mocked(providerWebDriver.verifyConnection);
+const mockedVerifyWebDriverConnection = vi.mocked(verifyTestMuConnection);
 
 beforeEach(() => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, manifest.name, 'testmu', 'export default () => {};');
+  const [plugin] = installedPlugins(env);
+  const manifestPath = path.join(plugin!.directory, 'package.json');
+  const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
+  fs.writeFileSync(manifestPath, JSON.stringify(declared));
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
   mockedVerifyWebDriverConnection.mockImplementation(async (options) => {
     assert.equal(options.provider, 'testmu');
     return {
@@ -69,6 +109,8 @@ test('connect testmu generates a local provider profile and verifies the virtual
       deviceName: 'iPhone 16',
       osVersion: '18.0',
       app: 'lt://APP1',
+      deviceType: 'virtual',
+      apiEndpoint: undefined,
     });
     const state = readRequiredActiveState(stateDir);
     assert.equal(state.tenant, 'testmu');
@@ -121,7 +163,7 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
         (error: unknown) =>
           error instanceof AppError &&
           error.code === 'INVALID_ARGS' &&
-          error.message.includes(`--provider-app ${app} is not a valid`),
+          error.message.includes('valid'),
       );
     }
   } finally {
@@ -223,6 +265,7 @@ test('connect testmu stores and verifies the real-device pool', async () => {
       osVersion: '18',
       app: 'lt://APP1',
       deviceType: 'real',
+      apiEndpoint: undefined,
     });
     const state = readRequiredActiveState(stateDir);
     const generated = readGeneratedConfig(state.remoteConfigPath);

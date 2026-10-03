@@ -4,10 +4,13 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import { installedPlugins } from './store.ts';
-import { resolvePluginEntry, assertUniquePluginProviders } from './manifest.ts';
-import { bindPluginHost, createPluginHost } from './host.ts';
+import {
+  resolvePluginEntry,
+  assertUniquePluginProviders,
+  RESERVED_PLUGIN_PROVIDERS,
+} from './manifest.ts';
+import { createPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
-import { BUILTIN_CONNECT_PROVIDERS } from '../cli/connection/provider-policy.ts';
 import type { WebDriverPluginOptions } from '../sdk/plugin-webdriver.ts';
 
 type ProviderPluginRegistration = Readonly<{
@@ -19,13 +22,15 @@ type ProviderPluginRegistration = Readonly<{
 export async function loadProviderPlugins(
   env: NodeJS.ProcessEnv,
   reservedProviders: readonly string[],
+  onlyProvider?: string,
 ): Promise<ProviderPluginRegistration[]> {
   const plugins = installedPlugins(env);
   assertUniquePluginProviders(plugins, reservedProviders);
   const registrations: ProviderPluginRegistration[] = [];
   try {
-    for (const plugin of plugins) {
-      bindPluginHost();
+    for (const plugin of plugins.filter(
+      (plugin) => onlyProvider === undefined || plugin.agentDevicePlugin.provider === onlyProvider,
+    )) {
       const module = await import(
         pathToFileURL(resolvePluginEntry(plugin.directory, plugin.agentDevicePlugin.entry)).href
       );
@@ -99,16 +104,16 @@ export async function loadProviderPlugins(
 export async function withPluginConnection<T>(
   provider: string,
   env: NodeJS.ProcessEnv,
-  use: (connection: PluginConnection) => Promise<T>,
+  runConnection: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
-  const registrations = await loadProviderPlugins(env, BUILTIN_CONNECT_PROVIDERS);
+  const registrations = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS, provider);
   try {
     const connection = registrations.find(
       (entry) => entry.runtime.provider === provider,
     )?.connection;
     if (!connection)
       throw new AppError('INVALID_ARGS', `Plugin does not register connect: ${provider}`);
-    return await use(connection);
+    return await runConnection(connection);
   } finally {
     await Promise.allSettled(registrations.map(async ({ runtime }) => await runtime.shutdown()));
   }

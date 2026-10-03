@@ -10,6 +10,16 @@ WebDriver sessions, and real devices you select with `--provider-device-type rea
 fronts both pools; agent-device selects the pool with `isRealMobile` and defaults to the
 virtual-device pool.
 
+## Install the plugin
+
+```bash
+agent-device plugins add @agent-device/testmu
+```
+
+The provider is an optional npm package installed under `AGENT_DEVICE_HOME`.
+After adding or updating it, close sessions and run `agent-device daemon stop`
+with the state directory you use; the next device command loads the selected plugin.
+
 ## Credentials and connection
 
 Set TestMu AI credentials in a non-interactive environment. These are the same variables every
