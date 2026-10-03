@@ -90,6 +90,12 @@ test('the hub install adapter uploads the build and launches the hinted app', as
   });
 });
 
+const hubReferenceGrammar = {
+  canonicalReference: (app: string) =>
+    app.slice(0, 6).toLowerCase() === 'hub://' ? `hub://${app.slice(6)}` : undefined,
+  isReference: (reference: string) => /^hub:\/\/\w+$/.test(reference),
+};
+
 test('the hub app resolver passes references through, uploads local files, and passes URLs through', async () => {
   const tempDir = await mkdtempForTest('agent-device-hub-resolve-');
   try {
@@ -100,12 +106,13 @@ test('the hub app resolver passes references through, uploads local files, and p
         service: 'Hub',
         app,
         cwd: tempDir,
-        referenceScheme: 'hub://',
         referenceLabel: 'a hub:// app id',
+        ...hubReferenceGrammar,
         uploadFile,
       });
 
     assert.equal(await resolve('hub://APP3'), 'hub://APP3');
+    assert.equal(await resolve('HUB://APP3'), 'hub://APP3');
     assert.equal(await resolve('https://builds.example/App.apk'), 'https://builds.example/App.apk');
     assert.equal(await resolve('App.apk'), 'hub://App.apk');
     assert.deepEqual(uploadFile.mock.calls, [[path.join(tempDir, 'App.apk'), undefined]]);
@@ -161,4 +168,34 @@ test('appending a route keeps a query on the base endpoint', () => {
     appendUrlPath('https://api.example.test/v1', 'sessions/S1').toString(),
     'https://api.example.test/v1/sessions/S1',
   );
+});
+
+test('the hub app resolver refuses a malformed reference, typed', async () => {
+  const tempDir = await mkdtempForTest('agent-device-hub-resolve-invalid-');
+  try {
+    const uploadFile = vi.fn(async () => 'hub://never');
+    const resolve = (app: string) =>
+      resolveHubAppReference({
+        service: 'Hub',
+        app,
+        cwd: tempDir,
+        referenceLabel: 'a hub:// app id',
+        ...hubReferenceGrammar,
+        uploadFile,
+      });
+
+    for (const [app, message] of [
+      ['hub://', /^Hub --provider-app hub:\/\/ is not a hub:\/\/ app id\.$/],
+      ['HUB://a b', /is not a hub:\/\/ app id/],
+    ] as const) {
+      await assert.rejects(
+        resolve(app),
+        (error: unknown) =>
+          error instanceof AppError && error.code === 'INVALID_ARGS' && message.test(error.message),
+      );
+    }
+    assert.equal(uploadFile.mock.calls.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });

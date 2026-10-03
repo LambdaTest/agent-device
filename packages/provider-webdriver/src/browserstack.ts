@@ -1,8 +1,12 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
+import {
+  canonicalBrowserStackAppReference,
+  CLOUD_WEBDRIVER_PROVIDERS,
+  isBrowserStackAppReference,
+} from './providers.ts';
 import {
   appendUrlPath,
   appFileUploadForm,
@@ -113,8 +117,9 @@ export async function resolveBrowserStackAppReference(
     service: 'BrowserStack',
     app,
     cwd: options.cwd,
-    referenceScheme: 'bs://',
     referenceLabel: 'a bs:// app id',
+    canonicalReference: canonicalBrowserStackAppReference,
+    isReference: isBrowserStackAppReference,
     uploadFile: async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
     signal: options.signal,
   });

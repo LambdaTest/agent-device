@@ -200,3 +200,38 @@ test('BrowserStack session details keep a query on the endpoint override', async
   assert.deepEqual(calls, ['https://api.example.test/sessions/SESSION1.json?region=eu']);
   assert.equal(result?.status, 'pending');
 });
+
+test('BrowserStack canonicalizes the bs:// scheme and refuses an id outside its grammar or a directory', async () => {
+  const tempDir = await mkdtempForTest('agent-device-browserstack-ref-');
+  const fetched: string[] = [];
+  globalThis.fetch = async (input) => {
+    fetched.push(String(input));
+    return new Response(JSON.stringify({ app_url: 'bs://uploaded' }), { status: 200 });
+  };
+  const resolve = async (app: string) =>
+    await resolveBrowserStackAppReference(app, { ...upload, cwd: tempDir });
+  try {
+    await fs.mkdir(path.join(tempDir, 'App.app'));
+    assert.equal(await resolve('BS://app-id'), 'bs://app-id');
+    assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
+    for (const app of ['bs://', 'bs://a b', 'Bs://a/b']) {
+      await assert.rejects(
+        resolve(app),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          error.message === `BrowserStack --provider-app ${app} is not a bs:// app id.`,
+      );
+    }
+    await assert.rejects(
+      resolve('App.app'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        /can only upload a regular app file: .*App\.app$/.test(error.message),
+    );
+    assert.deepEqual(fetched, []);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});

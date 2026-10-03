@@ -4,6 +4,10 @@ import {
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
+import {
+  canonicalBrowserStackAppReference,
+  isBrowserStackAppReference,
+} from '@agent-device/provider-webdriver/providers';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -49,6 +53,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
+    // Verification reads these flags; it must see the canonical reference the profile saved,
+    // not the spelling typed on the command line.
+    ...(providerConfig.providerApp
+      ? { extraFlags: { providerApp: providerConfig.providerApp } }
+      : {}),
   });
 }
 
@@ -121,7 +130,16 @@ function browserStackProfileFields(options: {
 }
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
-  if (app.startsWith('bs://') || /^https?:\/\//i.test(app)) return app;
+  if (/^https?:\/\//i.test(app)) return app;
+  const reference = canonicalBrowserStackAppReference(app);
+  if (reference !== undefined) {
+    if (isBrowserStackAppReference(reference)) return reference;
+    throw new AppError(
+      'INVALID_ARGS',
+      `BrowserStack --provider-app ${app} is not a bs:// app id.`,
+      { hint: 'Pass <bs://app-id-or-local-path>.' },
+    );
+  }
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;

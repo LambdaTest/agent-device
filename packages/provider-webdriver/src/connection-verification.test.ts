@@ -126,6 +126,35 @@ test('BrowserStack reports a non-JSON verification answer typed, with its status
   });
 });
 
+test('BrowserStack verification canonicalizes the bs:// scheme and refuses an id outside its grammar', async () => {
+  const fetchMock = vi.fn<typeof fetch>(async (input) =>
+    String(input).includes('devices')
+      ? jsonResponse([{ os: 'android', os_version: '14.0', device: 'Google Pixel 8' }])
+      : jsonResponse([{ app_name: 'sample.apk', app_url: 'bs://app-id' }]),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+
+  const result = await createProvider().verifyConnection({
+    ...browserStackOptions,
+    app: 'BS://app-id',
+  });
+  assert.deepEqual(result.app, {
+    status: 'verified',
+    name: 'sample.apk',
+    reference: 'bs://app-id',
+  });
+
+  fetchMock.mockClear();
+  await assert.rejects(
+    createProvider().verifyConnection({ ...browserStackOptions, app: 'bs://a b' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'BrowserStack --provider-app bs://a b is not a bs:// app id.',
+  );
+  assert.equal(fetchMock.mock.calls.length, 0);
+});
+
 test('BrowserStack defers a bs app reference outside the recent upload window', async () => {
   vi.stubGlobal(
     'fetch',

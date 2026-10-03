@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { canonicalBrowserStackAppReference, isBrowserStackAppReference } from './providers.ts';
 import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   CloudWebDriverConnectionVerification,
@@ -21,6 +22,7 @@ export async function verifyBrowserStackConnection(
   options: BrowserStackOptions,
   clientVersion: string,
 ): Promise<CloudWebDriverConnectionVerification> {
+  const providerApp = readBrowserStackAppOption(options.app);
   const auth = { username: options.username, accessKey: options.accessKey };
   const devices = await fetchBrowserStackJson(
     options.devicesEndpoint ?? BROWSERSTACK_DEVICES_ENDPOINT,
@@ -43,7 +45,7 @@ export async function verifyBrowserStackConnection(
     );
   }
 
-  const app = await verifyBrowserStackApp(options, auth, clientVersion);
+  const app = await verifyBrowserStackApp(providerApp, options, auth, clientVersion);
   return {
     provider: 'browserstack',
     service: 'BrowserStack',
@@ -61,13 +63,23 @@ export async function verifyBrowserStackConnection(
   };
 }
 
+/** Hand-authored remote configs reach verification without passing through connect's normalization. */
+function readBrowserStackAppOption(app: string): string {
+  const reference = canonicalBrowserStackAppReference(app);
+  if (reference === undefined) return app;
+  if (isBrowserStackAppReference(reference)) return reference;
+  throw new AppError('INVALID_ARGS', `BrowserStack --provider-app ${app} is not a bs:// app id.`, {
+    providerApp: app,
+  });
+}
+
 async function verifyBrowserStackApp(
+  app: string,
   options: BrowserStackOptions,
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<ProviderConnectionResource> {
-  const { app } = options;
-  if (app.startsWith('bs://')) {
+  if (isBrowserStackAppReference(app)) {
     const apps = await fetchBrowserStackJson(
       options.appsEndpoint ?? BROWSERSTACK_APPS_ENDPOINT,
       auth,

@@ -151,21 +151,33 @@ export function createHubUploadApp(
 }
 
 /**
- * Turns `--provider-app` into a reference the hub accepts: its own reference scheme and public
- * URLs pass through, and anything else must be a local file to upload.
+ * Turns `--provider-app` into a reference the hub accepts: its own reference passes through in
+ * canonical form when it fits the hub's grammar, public URLs pass through, and anything else must
+ * be a local file to upload.
  */
 export async function resolveHubAppReference(options: {
   service: string;
   app: string;
   cwd?: string;
-  referenceScheme: string;
   /** How the scheme reads in the error message, e.g. `a bs:// app id`. */
   referenceLabel: string;
+  /** The canonical spelling of the hub's own reference, or undefined when `app` is not one. */
+  canonicalReference: (app: string) => string | undefined;
+  isReference: (reference: string) => boolean;
   uploadFile: (appPath: string, signal?: AbortSignal) => Promise<string>;
   signal?: AbortSignal;
 }): Promise<string> {
   const { app } = options;
-  if (app.startsWith(options.referenceScheme) || /^https?:\/\//i.test(app)) return app;
+  const reference = options.canonicalReference(app);
+  if (reference !== undefined) {
+    if (options.isReference(reference)) return reference;
+    throw new AppError(
+      'INVALID_ARGS',
+      `${options.service} --provider-app ${app} is not ${options.referenceLabel}.`,
+      { providerApp: app },
+    );
+  }
+  if (/^https?:\/\//i.test(app)) return app;
   const appPath = path.resolve(options.cwd ?? process.cwd(), app);
   if (!fs.existsSync(appPath)) {
     throw new AppError(
