@@ -61,6 +61,7 @@ test('the hub upload helper fails typed with the status on an error page or a mi
   for (const response of [
     new Response('<html>502 Bad Gateway</html>', { status: 502 }),
     new Response(JSON.stringify({ message: 'ok' }), { status: 200 }),
+    new Response(JSON.stringify({ ref: '  ' }), { status: 200 }),
   ]) {
     globalThis.fetch = async () => response;
     await assert.rejects(postHubAppUpload(new FormData(), hub), (error: unknown) => {

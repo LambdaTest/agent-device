@@ -124,7 +124,7 @@ export async function postHubAppUpload(
     signal,
   });
   const json = await readProviderJsonBody(response);
-  const appReference = options.readAppReference(json);
+  const appReference = options.readAppReference(json)?.trim();
   if (!response.ok || !appReference) {
     throw new AppError('COMMAND_FAILED', `${options.service} app upload failed.`, {
       status: response.status,
