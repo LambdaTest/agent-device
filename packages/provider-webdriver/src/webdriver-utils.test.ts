@@ -105,6 +105,7 @@ test('the hub app resolver passes references through, uploads local files, and p
 
     assert.equal(await resolve('hub://APP3'), 'hub://APP3');
     assert.equal(await resolve('https://builds.example/App.apk'), 'https://builds.example/App.apk');
+    assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
     assert.equal(await resolve('App.apk'), 'hub://App.apk');
     assert.deepEqual(uploadFile.mock.calls, [[path.join(tempDir, 'App.apk'), undefined]]);
     await assert.rejects(resolve('missing.apk'), (error: unknown) => {
