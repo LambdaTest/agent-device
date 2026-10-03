@@ -26,7 +26,6 @@ export type MaterializeInstallableOptions = {
     stat: { isFile(): boolean; isDirectory(): boolean },
   ) => boolean;
   installableLabel: string;
-  allowArchiveExtraction?: boolean;
   signal?: AbortSignal;
   downloadTimeoutMs?: number;
 };
@@ -61,7 +60,6 @@ export async function materializeInstallablePath(
       archivePath: undefined,
       isInstallablePath: options.isInstallablePath,
       installableLabel: options.installableLabel,
-      allowArchiveExtraction: options.allowArchiveExtraction !== false,
       registerCleanup: (cleanup) => {
         cleanupTasks.push(cleanup);
       },
@@ -159,6 +157,11 @@ export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
   await approveDownloadSourceUrl(parsedUrl);
 }
 
+/**
+ * @deprecated agent-device does not gate install sources on this check: URL sources from any
+ * public host may point at an installable or an archive containing one. This only classifies
+ * whether a URL names a GitHub Actions or EAS artifact, which says nothing about who built it.
+ */
 export function isTrustedInstallSourceUrl(sourceUrl: string | URL): boolean {
   const parsed = sourceUrl instanceof URL ? sourceUrl : URL.parse(sourceUrl);
   if (!parsed) throw new AppError('INVALID_ARGS', 'Invalid source URL');

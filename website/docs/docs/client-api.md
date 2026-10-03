@@ -76,7 +76,7 @@ Supported public entry points for Node consumers:
   - types: `FindMatchOptions`
 - `agent-device/install-source`
   - `ARCHIVE_EXTENSIONS`
-  - `isTrustedInstallSourceUrl(sourceUrl)`
+  - `isTrustedInstallSourceUrl(sourceUrl)` (deprecated; install sources are not gated on it)
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
@@ -97,6 +97,8 @@ Supported public entry points for Node consumers:
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
     `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
+- `agent-device/plugins`
+  - experimental factory context: `ProviderPluginHost`; see [provider plugins](./plugins.md).
 - `agent-device/ai-sdk`
   - `createAgentDeviceTools(options)`
   - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
@@ -341,6 +343,8 @@ The complete domain-client method map is:
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
 
+`client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
+
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
 The event timeline keeps operational context such as command/status/timing, paths, session/device/app identifiers, refs/selectors, and coordinates. Typed text, clipboard writes, push/event payloads, raw unknown command arguments, and matching raw message fragments are replaced with length-only placeholders.
 
@@ -429,7 +433,7 @@ If the daemon cannot determine installed app identity, the request fails instead
 `installFromSource()` URL sources are intentionally limited:
 
 - Private and loopback hosts are blocked by default.
-- Archive-backed URL installs are only supported for trusted artifact services, currently GitHub Actions and EAS.
+- URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
 - For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
 - For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
 - For compatible remote daemons that resolve CI artifacts server-side, pass a GitHub Actions artifact source:
@@ -448,7 +452,7 @@ await client.apps.installFromSource({
 
 Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client preserves these payloads and does not perform GitHub authentication or artifact download.
 
-Direct Android `.apk` and `.aab` URL sources can still resolve package identity from the downloaded install artifact. Trusted GitHub Actions and EAS archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app` tar archive.
+Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
 
 ## Remote Metro helpers
 
