@@ -161,8 +161,9 @@ type ProviderJsonFailureHints = {
 
 /**
  * Fetches JSON from a hosted provider's API during connection verification. A 401/403 is
- * `UNAUTHORIZED` with a credential hint, any other non-2xx is `COMMAND_FAILED`, and a transport
- * failure is wrapped so its cause survives without leaking the credentials.
+ * `UNAUTHORIZED` with a credential hint, any other non-2xx or a body that is not JSON is
+ * `COMMAND_FAILED` with the status, and a transport failure is wrapped so its cause survives
+ * without leaking the credentials.
  */
 export async function fetchProviderVerificationJson(
   endpoint: string | URL,
@@ -173,6 +174,7 @@ export async function fetchProviderVerificationJson(
   },
 ): Promise<unknown> {
   const { service, unauthorizedHint, networkHint } = options.hints;
+  const serviceHint = `Retry connect or check the ${service} service status.`;
   try {
     const response = await fetch(endpoint, {
       headers: {
@@ -188,13 +190,19 @@ export async function fetchProviderVerificationJson(
         `${service} rejected connection verification.`,
         {
           status: response.status,
-          hint: unauthorized
-            ? unauthorizedHint
-            : `Retry connect or check the ${service} service status.`,
+          hint: unauthorized ? unauthorizedHint : serviceHint,
         },
       );
     }
-    return (await response.json()) as unknown;
+    const json = await readProviderJsonBody(response);
+    if (json === undefined) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `${service} connection verification answer was not JSON.`,
+        { status: response.status, hint: serviceHint },
+      );
+    }
+    return json;
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError(
