@@ -1,4 +1,11 @@
-export { createCloudWebDriverRuntime } from './runtime.ts';
+import type { CloudWebDriverRuntimeOptions, CloudWebDriverRuntime } from './runtime.ts';
+
+export async function createCloudWebDriverRuntime(
+  options: CloudWebDriverRuntimeOptions,
+): Promise<CloudWebDriverRuntime> {
+  const runtime = await import('./runtime.ts');
+  return runtime.createCloudWebDriverRuntime(options);
+}
 export type {
   CloudWebDriverRuntimeOptions,
   CloudWebDriverPlatform,
@@ -16,4 +23,4 @@ export {
   resolveHubAppReference,
 } from './webdriver-utils.ts';
 export { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
-export { buildCloudWebDriverBaseCapabilities } from './runtime-session.ts';
+export { buildCloudWebDriverBaseCapabilities } from './capabilities.ts';

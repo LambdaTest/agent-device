@@ -204,7 +204,7 @@ test('TestMu facade routes a real-device session to the real pool and its upload
         undefined,
       ),
     );
-    const runtime = createCloudWebDriverRuntime({
+    const runtime = await createCloudWebDriverRuntime({
       ...registration.webDriver,
       clientVersion: CLIENT_VERSION,
     });
@@ -256,7 +256,7 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
           undefined,
         ),
       );
-      const runtime = createCloudWebDriverRuntime({
+      const runtime = await createCloudWebDriverRuntime({
         ...registration.webDriver,
         clientVersion: CLIENT_VERSION,
       });
