@@ -16,6 +16,7 @@ import {
   checkPackageInternalSites,
   checkRootSites,
   readWorkspacePackages,
+  workspacePackagesFromManifests,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
@@ -146,6 +147,38 @@ test('readWorkspacePackages reads tracked manifests only', () => {
     !names.includes('@agent-device/scratch'),
     'an uncommitted package directory is not part of the committed state R11 describes',
   );
+});
+
+test('published ESM plugins declare bundled workspace build dependencies without runtime dependencies', () => {
+  const [plugin] = workspacePackagesFromManifests(
+    new Map([
+      [
+        'packages/provider-example/package.json',
+        JSON.stringify({
+          name: '@agent-device/example',
+          exports: { '.': { import: './dist/plugin.mjs' } },
+          devDependencies: { '@agent-device/kernel': 'workspace:*', tsdown: '^0.21.0' },
+        }),
+      ],
+    ]),
+  );
+  assert.ok(plugin);
+  assert.equal(
+    plugin.exportTargets.get('@agent-device/example'),
+    'packages/provider-example/dist/plugin.mjs',
+  );
+  assert.deepEqual([...plugin.workspaceDependencies], ['@agent-device/kernel']);
+  assert.equal(plugin.externalDependencies.size, 0);
+  const sites = specifierSites(
+    'packages/provider-example/src/plugin.ts',
+    "import { AppError } from '@agent-device/kernel/errors';",
+  );
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel]), []);
+  const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'R11 package-boundaries');
+  assert.match(violations[0]?.message ?? '', /without declaring/);
 });
 
 test('every workspace package façade names its exports explicitly (no bare `export *`)', () => {

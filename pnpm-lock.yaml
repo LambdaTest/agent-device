@@ -86,6 +86,9 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:packages/session-journal
+      '@agent-device/testmu':
+        specifier: workspace:*
+        version: link:packages/provider-testmu
       '@agent-device/xml':
         specifier: workspace:*
         version: link:packages/xml

@@ -12,8 +12,14 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/plugin.mjs"
-    }
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./connection-verification": {
+      "types": "./src/testmu-connection-verification.ts",
+      "default": "./src/testmu-connection-verification.ts"
+    },
+    "./package.json": "./package.json"
   },
   "devDependencies": {
     "@agent-device/contracts": "workspace:*",
@@ -33,6 +39,13 @@
       "supportsDeferredAppSelection": false,
       "supportsDirectPortReverse": false,
       "usesCloudWebDriverLease": true
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/plugin.mjs"
+      }
     }
   }
 }
