@@ -9,19 +9,19 @@ import {
 } from '../remote/remote-connection-state.ts';
 import { resolveCloudWebDriverConnectProfile as resolveBuiltinProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { verifyTestMuConnection } from '../../packages/provider-testmu/src/testmu-connection-verification.ts';
-import testMuPlugin from '../../packages/provider-testmu/src/plugin.ts';
+import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
+import testMuPlugin from '@agent-device/testmu';
 import { createPluginHost } from '../plugins/host.ts';
 import { persistAndResolveGeneratedProfile } from '../cli/connection/generated-config.ts';
 import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
 import { installedPlugins } from '../plugins/store.ts';
-import manifest from '../../packages/provider-testmu/package.json' with { type: 'json' };
+import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { PluginConnection } from '../plugins/connection.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
-vi.mock('../../packages/provider-testmu/src/testmu-connection-verification.ts', () => ({
+vi.mock('@agent-device/testmu/connection-verification', () => ({
   verifyTestMuConnection: vi.fn(),
 }));
 vi.mock('../plugins/load.ts', () => ({
