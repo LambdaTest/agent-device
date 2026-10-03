@@ -56,6 +56,13 @@ export function trimTrailingSlash(value: string): string {
   return lastNonSlash === value.length - 1 ? value : value.slice(0, lastNonSlash + 1);
 }
 
+/** Appends `route` to the base's path; a query on the base is kept rather than swallowing the route. */
+export function appendUrlPath(base: string | URL, route: string): URL {
+  const url = new URL(base);
+  url.pathname = `${trimTrailingSlash(url.pathname)}/${route}`;
+  return url;
+}
+
 export function withTrailingSlash(url: URL): URL {
   if (url.pathname.endsWith('/')) return url;
   const copy = new URL(url);

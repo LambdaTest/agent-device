@@ -38,7 +38,8 @@ export function urlArtifactFromDetails(
   kind: CloudArtifact['kind'],
   name: string,
 ): CloudArtifact | undefined {
-  const url = details[field];
-  if (typeof url !== 'string' || url.length === 0) return undefined;
+  const value = details[field];
+  const url = typeof value === 'string' ? value.trim() : '';
+  if (url.length === 0) return undefined;
   return { provider, providerSessionId, kind, name, url, availability: 'ready' };
 }

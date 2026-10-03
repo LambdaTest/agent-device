@@ -5,6 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { asOptionalRecord } from '@agent-device/kernel/record';
 import {
+  appendUrlPath,
   appFileUploadForm,
   createHubUploadApp,
   postHubAppUpload,
@@ -149,4 +150,15 @@ test('appFileUploadForm carries a regular app file and refuses anything else typ
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test('appending a route keeps a query on the base endpoint', () => {
+  assert.equal(
+    appendUrlPath('https://api.example.test/v1/?region=eu', 'sessions/S%201').toString(),
+    'https://api.example.test/v1/sessions/S%201?region=eu',
+  );
+  assert.equal(
+    appendUrlPath('https://api.example.test/v1', 'sessions/S1').toString(),
+    'https://api.example.test/v1/sessions/S1',
+  );
 });
