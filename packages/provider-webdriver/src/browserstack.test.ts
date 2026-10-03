@@ -215,13 +215,16 @@ test('BrowserStack canonicalizes the bs:// scheme and refuses an id outside its 
     assert.equal(await resolve('BS://app-id'), 'bs://app-id');
     assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
     for (const app of ['bs://', 'bs://a b', 'Bs://a/b']) {
-      await assert.rejects(
-        resolve(app),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === 'INVALID_ARGS' &&
-          error.message === `BrowserStack --provider-app ${app} is not a bs:// app id.`,
-      );
+      await assert.rejects(resolve(app), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.message, `BrowserStack --provider-app ${app} is not a bs:// app id.`);
+        assert.deepEqual(error.details, {
+          providerApp: app,
+          hint: 'Pass <bs://app-id-or-local-path>.',
+        });
+        return true;
+      });
     }
     await assert.rejects(
       resolve('App.app'),

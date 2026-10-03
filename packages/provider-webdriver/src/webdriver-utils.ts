@@ -161,22 +161,17 @@ export async function resolveHubAppReference(options: {
   cwd?: string;
   /** How the scheme reads in the error message, e.g. `a bs:// app id`. */
   referenceLabel: string;
-  /** The canonical spelling of the hub's own reference, or undefined when `app` is not one. */
-  canonicalReference: (app: string) => string | undefined;
-  isReference: (reference: string) => boolean;
+  /**
+   * The canonical spelling of the hub's own reference, or undefined when `app` is not one. Throws
+   * when `app` uses the hub's scheme outside its grammar.
+   */
+  parseReference: (app: string) => string | undefined;
   uploadFile: (appPath: string, signal?: AbortSignal) => Promise<string>;
   signal?: AbortSignal;
 }): Promise<string> {
   const { app } = options;
-  const reference = options.canonicalReference(app);
-  if (reference !== undefined) {
-    if (options.isReference(reference)) return reference;
-    throw new AppError(
-      'INVALID_ARGS',
-      `${options.service} --provider-app ${app} is not ${options.referenceLabel}.`,
-      { providerApp: app },
-    );
-  }
+  const reference = options.parseReference(app);
+  if (reference !== undefined) return reference;
   if (/^https?:\/\//i.test(app)) return app;
   const appPath = path.resolve(options.cwd ?? process.cwd(), app);
   if (!fs.existsSync(appPath)) {

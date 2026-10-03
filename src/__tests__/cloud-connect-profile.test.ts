@@ -451,10 +451,16 @@ test('connect browserstack canonicalizes the app scheme and refuses a malformed 
             env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
             flags: { json: false, help: false, version: false, ...flags, providerApp: app },
           }),
-        (error: unknown) =>
-          error instanceof AppError &&
-          error.code === 'INVALID_ARGS' &&
-          error.message === `BrowserStack --provider-app ${app} is not a bs:// app id.`,
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.equal(error.message, `BrowserStack --provider-app ${app} is not a bs:// app id.`);
+          assert.deepEqual(error.details, {
+            providerApp: app,
+            hint: 'Pass <bs://app-id-or-local-path>.',
+          });
+          return true;
+        },
       );
     }
   } finally {

@@ -92,9 +92,12 @@ test('the hub install adapter uploads the build and launches the hinted app', as
 });
 
 const hubReferenceGrammar = {
-  canonicalReference: (app: string) =>
-    app.slice(0, 6).toLowerCase() === 'hub://' ? `hub://${app.slice(6)}` : undefined,
-  isReference: (reference: string) => /^hub:\/\/\w+$/.test(reference),
+  parseReference: (app: string) => {
+    if (app.slice(0, 6).toLowerCase() !== 'hub://') return undefined;
+    const reference = `hub://${app.slice(6)}`;
+    if (/^hub:\/\/\w+$/.test(reference)) return reference;
+    throw new AppError('INVALID_ARGS', `Hub --provider-app ${app} is not a hub:// app id.`);
+  },
 };
 
 test('the hub app resolver passes references through, uploads local files, and passes URLs through', async () => {
@@ -171,7 +174,7 @@ test('appending a route keeps a query on the base endpoint', () => {
   );
 });
 
-test('the hub app resolver refuses a malformed reference, typed', async () => {
+test('the hub app resolver surfaces the grammar rejection of a malformed reference without uploading', async () => {
   const tempDir = await mkdtempForTest('agent-device-hub-resolve-invalid-');
   try {
     const uploadFile = vi.fn(async () => 'hub://never');

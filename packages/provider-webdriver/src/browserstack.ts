@@ -1,4 +1,5 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
@@ -108,6 +109,19 @@ export function createBrowserStackUploadApp(
   );
 }
 
+/**
+ * The canonical `bs://` reference for `app`, or undefined when `app` does not use the scheme. A
+ * `bs://` value outside the id grammar is `INVALID_ARGS`, worded the same on every path.
+ */
+export function parseBrowserStackAppReference(app: string): string | undefined {
+  const reference = canonicalBrowserStackAppReference(app);
+  if (reference === undefined || isBrowserStackAppReference(reference)) return reference;
+  throw new AppError('INVALID_ARGS', `BrowserStack --provider-app ${app} is not a bs:// app id.`, {
+    providerApp: app,
+    hint: 'Pass <bs://app-id-or-local-path>.',
+  });
+}
+
 /** The hub fetches a public URL itself, so only a local path is uploaded. */
 export async function resolveBrowserStackAppReference(
   app: string,
@@ -118,8 +132,7 @@ export async function resolveBrowserStackAppReference(
     app,
     cwd: options.cwd,
     referenceLabel: 'a bs:// app id',
-    canonicalReference: canonicalBrowserStackAppReference,
-    isReference: isBrowserStackAppReference,
+    parseReference: parseBrowserStackAppReference,
     uploadFile: async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
     signal: options.signal,
   });

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { canonicalBrowserStackAppReference, isBrowserStackAppReference } from './providers.ts';
+import { parseBrowserStackAppReference } from './browserstack.ts';
+import { isBrowserStackAppReference } from './providers.ts';
 import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   CloudWebDriverConnectionVerification,
@@ -65,12 +66,7 @@ export async function verifyBrowserStackConnection(
 
 /** Hand-authored remote configs reach verification without passing through connect's normalization. */
 function readBrowserStackAppOption(app: string): string {
-  const reference = canonicalBrowserStackAppReference(app);
-  if (reference === undefined) return app;
-  if (isBrowserStackAppReference(reference)) return reference;
-  throw new AppError('INVALID_ARGS', `BrowserStack --provider-app ${app} is not a bs:// app id.`, {
-    providerApp: app,
-  });
+  return parseBrowserStackAppReference(app) ?? app;
 }
 
 async function verifyBrowserStackApp(

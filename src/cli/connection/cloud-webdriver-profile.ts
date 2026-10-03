@@ -1,13 +1,10 @@
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
+  parseBrowserStackAppReference,
   readAwsDeviceFarmRegionFromArn,
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
-import {
-  canonicalBrowserStackAppReference,
-  isBrowserStackAppReference,
-} from '@agent-device/provider-webdriver/providers';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -131,15 +128,8 @@ function browserStackProfileFields(options: {
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
   if (/^https?:\/\//i.test(app)) return app;
-  const reference = canonicalBrowserStackAppReference(app);
-  if (reference !== undefined) {
-    if (isBrowserStackAppReference(reference)) return reference;
-    throw new AppError(
-      'INVALID_ARGS',
-      `BrowserStack --provider-app ${app} is not a bs:// app id.`,
-      { hint: 'Pass <bs://app-id-or-local-path>.' },
-    );
-  }
+  const reference = parseBrowserStackAppReference(app);
+  if (reference !== undefined) return reference;
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;

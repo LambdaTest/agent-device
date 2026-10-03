@@ -147,10 +147,16 @@ test('BrowserStack verification canonicalizes the bs:// scheme and refuses an id
   fetchMock.mockClear();
   await assert.rejects(
     createProvider().verifyConnection({ ...browserStackOptions, app: 'bs://a b' }),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message === 'BrowserStack --provider-app bs://a b is not a bs:// app id.',
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.message, 'BrowserStack --provider-app bs://a b is not a bs:// app id.');
+      assert.deepEqual(error.details, {
+        providerApp: 'bs://a b',
+        hint: 'Pass <bs://app-id-or-local-path>.',
+      });
+      return true;
+    },
   );
   assert.equal(fetchMock.mock.calls.length, 0);
 });
