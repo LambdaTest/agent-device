@@ -1,0 +1,38 @@
+{
+  "name": "@agent-device/testmu",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TestMu AI real and virtual mobile device plugin for agent-device.",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/plugin.mjs"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provider-webdriver": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "testmu",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": true,
+      "supportsDeferredAppSelection": false,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": true
+    }
+  }
+}

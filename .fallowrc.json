@@ -2,6 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "tsdown.config.ts",
+    "packages/provider-testmu/tsdown.config.ts",
+    "packages/provider-testmu/src/plugin.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
@@ -384,7 +386,7 @@
     },
     {
       "comment": "TestMu session preparation reads these off the lazy loadTestMuDeviceFeatures() import in packages/provider-webdriver/src/provider-definitions.ts, which keeps the package entry's eager closure unchanged; Fallow cannot connect the dynamic member reads.",
-      "file": "packages/provider-webdriver/src/testmu-device-features.ts",
+      "file": "packages/provider-testmu/src/testmu-device-features.ts",
       "exports": [
         "buildTestMuDeviceFeatureCapabilities",
         "readTestMuDeviceFeatureFields",
