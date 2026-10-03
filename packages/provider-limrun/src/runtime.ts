@@ -260,6 +260,9 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const existing = this.sessions.get(lease.leaseId);
     if (existing) return { limrunInstanceId: existing.instanceId, device: existing.device };
 
+    const { rejectRefusedLimrunProfileFields } = await import('./session-allocation.ts');
+    // Ahead of attach as well as create: an attached instance reads none of the refused fields either.
+    rejectRefusedLimrunProfileFields(context);
     const session =
       (await this.attachSession(platform, lease)) ??
       (await this.createSession(platform, lease, context));
