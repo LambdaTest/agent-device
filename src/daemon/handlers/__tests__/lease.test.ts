@@ -156,8 +156,11 @@ test('a lease whose provider allocation outlasts its TTL is active when allocati
 });
 
 test('a lease allocated without a provider keeps the TTL it was created with', async () => {
-  const now = 5_000;
-  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 60_000 });
+  let now = 5_000;
+  const registry = new LeaseRegistry({
+    now: () => (now += 1_000),
+    defaultLeaseTtlMs: 60_000,
+  });
   const response = await handleLeaseCommands({
     req: allocateRequest(),
     sessionName: 'lease-ttl-test',
@@ -167,8 +170,8 @@ test('a lease allocated without a provider keeps the TTL it was created with', a
 
   assert.equal(response?.ok, true);
   const lease = (response?.ok ? response.data?.lease : undefined) as DeviceLease;
-  assert.equal(lease.createdAt, 5_000);
-  assert.equal(lease.heartbeatAt, 5_000);
-  assert.equal(lease.expiresAt, 65_000);
+  assert.ok(now > lease.createdAt, 'the clock advanced while the lease was allocated');
+  assert.equal(lease.heartbeatAt, lease.createdAt);
+  assert.equal(lease.expiresAt, lease.createdAt + 60_000);
   assert.deepEqual(registry.listActiveLeases(), [lease]);
 });
