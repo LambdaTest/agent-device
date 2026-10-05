@@ -973,3 +973,22 @@ test('Limrun without an API key refuses operations that need one', async () => {
   }
   assert.throws(() => new LimrunRuntime({}), /requires an apiKey or instance access/);
 });
+
+test('Limrun attaches an existing instance under a consumed field and refuses a refused one', async () => {
+  const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
+  const allocateLease = runtime.leaseLifecycle.allocate;
+  if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
+  try {
+    await assert.rejects(
+      allocateLease(iosLease('lease-refused'), { flags: { providerOsVersion: '18.0' } }),
+      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    );
+    assert.equal(vi.mocked(createIosInstanceClient).mock.calls.length, 0);
+    const ios = await allocateLease(iosLease('lease-attached-ios'), {
+      flags: { providerApp: 'Example.ipa' },
+    });
+    assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
+  } finally {
+    await runtime.shutdown();
+  }
+});
