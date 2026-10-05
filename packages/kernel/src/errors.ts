@@ -41,11 +41,7 @@ const APP_ERROR_BRAND = Symbol.for('agent-device.AppError');
 export class AppError extends Error {
   static [Symbol.hasInstance](value: unknown): boolean {
     if (this !== AppError) return Function.prototype[Symbol.hasInstance].call(this, value);
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      (value as Record<symbol, unknown>)[APP_ERROR_BRAND] === true
-    );
+    return value instanceof Error && (value as Record<symbol, unknown>)[APP_ERROR_BRAND] === true;
   }
 
   code: AppErrorCode;

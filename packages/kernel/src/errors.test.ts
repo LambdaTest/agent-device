@@ -191,6 +191,9 @@ test('bundled plugin errors preserve codes and details without changing subclass
   assert.deepEqual(normalized.details, { provider: 'example' });
   const ordinary = Object.assign(new Error('bad plugin profile'), { code: 'INVALID_ARGS' });
   assert.equal(ordinary instanceof AppError, false);
+  const forged = { [Symbol.for('agent-device.AppError')]: true };
+  assert.equal(forged instanceof AppError, false);
+  assert.equal(normalizeError(forged).code, 'UNKNOWN');
   class SpecificError extends AppError {}
   assert.ok(new SpecificError('COMMAND_FAILED', 'specific') instanceof SpecificError);
   assert.equal(foreign instanceof SpecificError, false);
