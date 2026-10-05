@@ -11,6 +11,17 @@ import {
   requireRequestPlatform,
 } from '@agent-device/provider-webdriver/plugin';
 import { createTestMuConnection } from './connection.ts';
+import {
+  buildTestMuCapabilities,
+  createTestMuUploadApp,
+  listTestMuCloudArtifacts,
+  resolveTestMuAppReference,
+} from './testmu.ts';
+import {
+  buildTestMuDeviceFeatureCapabilities,
+  readTestMuDeviceFeatureFields,
+  readTestMuDeviceType,
+} from './testmu-device-features.ts';
 const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
 const TESTMU_CAPABILITY_OVERRIDES = {
   install: {
@@ -26,9 +37,6 @@ const TESTMU_CAPABILITY_OVERRIDES = {
     note: 'TestMu AI session details expose provider-hosted video, Appium logs, device logs, network logs, and dashboard links.',
   },
 } as const;
-
-const loadTestMu = async () => await import('./testmu.ts');
-const loadTestMuDeviceFeatures = async () => await import('./testmu-device-features.ts');
 
 const TESTMU_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   provider: 'testmu',
@@ -64,7 +72,6 @@ export default function testMuPlugin(host: ProviderPluginHost) {
     providerSessionId: string | undefined,
     env: ProviderPluginHost['env'],
   ) {
-    const { listTestMuCloudArtifacts } = await loadTestMu();
     return await listTestMuCloudArtifacts(provider, providerSessionId, {
       clientVersion: host.clientVersion,
       ...requireTestMuCredentials(env, 'TestMu AI artifact lookup'),
@@ -82,13 +89,6 @@ export default function testMuPlugin(host: ProviderPluginHost) {
       await listTestMuArtifactsFromEnv(provider, providerSessionId, env),
     prepareSession: async ({ req, lease, base }) => {
       const request = requireRequest(req, 'TestMu AI');
-      const { buildTestMuCapabilities, createTestMuUploadApp, resolveTestMuAppReference } =
-        await loadTestMu();
-      const {
-        buildTestMuDeviceFeatureCapabilities,
-        readTestMuDeviceFeatureFields,
-        readTestMuDeviceType,
-      } = await loadTestMuDeviceFeatures();
       const deviceType = readTestMuDeviceType(request.flags);
       const uploadEndpoint = testMuAppUploadEndpoint(env, deviceType);
       const credentials = requireTestMuCredentials(env, 'TestMu AI');

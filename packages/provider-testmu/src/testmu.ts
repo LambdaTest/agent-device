@@ -19,9 +19,9 @@ import { asOptionalRecord } from '@agent-device/kernel/record';
 import { canonicalTestMuAppReference, isTestMuAppReference } from './providers.ts';
 
 /**
- * TestMu session, upload, and artifact mechanics. Loaded on demand by the provider definition;
- * `isRealMobile` in `lt:options` is what routes a session to the real or virtual device pool, and
- * the hostnames still carry the lambdatest.com brand.
+ * TestMu session, upload, and artifact mechanics. `isRealMobile` in `lt:options` is what routes a
+ * session to the real or virtual device pool, and the hostnames still carry the lambdatest.com
+ * brand.
  */
 const TESTMU_APP_UPLOAD_ENDPOINTS: Record<ProviderDeviceType, string> = {
   real: 'https://manual-api.lambdatest.com/app/upload/realDevice',
