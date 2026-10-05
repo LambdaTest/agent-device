@@ -74,9 +74,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
       );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
-      // A run's repeat allocation reuses its live lease; refusing that request must not end the
-      // lease, or the provider session the first allocation created is left without an owner.
-      // A requester that hung up owns nothing, so its canceled repeat allocation still releases.
       const reused = activeLeaseIds.has(lease.leaseId);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
@@ -94,15 +91,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          if (!reused) {
-            leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
-          } else if (isRequestCanceled(requestId)) {
-            throw await releaseAllocationForGoneRequester(
-              lease,
-              leaseLifecycleProvider,
-              leaseRegistry,
-            );
-          }
+          await settleFailedAllocation(
+            lease,
+            reused,
+            requestId,
+            leaseLifecycleProvider,
+            leaseRegistry,
+          );
           throw error;
         } finally {
           work?.release();
@@ -201,6 +196,25 @@ async function releaseLease(
  * and the provider session counts as released only when it reported no
  * warnings — otherwise the error names what an operator must stop by hand.
  */
+// A run's repeat allocation reuses its live lease; refusing that request must not end the
+// lease, or the provider session the first allocation created is left without an owner.
+// A requester that hung up owns nothing, so its canceled repeat allocation still releases.
+async function settleFailedAllocation(
+  lease: DeviceLease,
+  reused: boolean,
+  requestId: string | undefined,
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  leaseRegistry: LeaseRegistry,
+): Promise<void> {
+  if (!reused) {
+    leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+    return;
+  }
+  if (isRequestCanceled(requestId)) {
+    throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
+  }
+}
+
 async function releaseAllocationForGoneRequester(
   lease: DeviceLease,
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
