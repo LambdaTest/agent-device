@@ -36,7 +36,7 @@ function setup(): { session: SessionState; sessionStore: SessionStore; stateDir:
     actions: [],
   };
   const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   return { session, sessionStore, stateDir };
 }
 
@@ -47,7 +47,7 @@ test('finalizes provider state but does not clear a claim after shutdown teardow
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
     beforeDelete,
@@ -67,7 +67,7 @@ test('finalizes provider state but does not clear a claim after shutdown teardow
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
     beforeDelete,

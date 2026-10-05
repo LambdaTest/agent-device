@@ -66,6 +66,7 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
+@property(nonatomic, strong) UILabel *textEntryDigitSlots;
 @property(nonatomic, assign) NSUInteger textEntryWriteBacks;
 @property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
 @property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
@@ -80,6 +81,17 @@ int main(int argc, const char *argv[]) {
 
 #if TARGET_OS_IOS
 @interface AgentDeviceRunnerViewController () <UNUserNotificationCenterDelegate>
+@end
+
+// A one-time-code field that announces how many digits it holds instead of the digits, the way
+// React Native OTP inputs set `accessibilityValue` on their hidden text input.
+@interface AgentDeviceDigitCountTextField : UITextField
+@end
+
+@implementation AgentDeviceDigitCountTextField
+- (NSString *)accessibilityValue {
+  return [NSString stringWithFormat:@"%lu of 6 digits", (unsigned long)self.text.length];
+}
 @end
 #endif
 
@@ -265,6 +277,7 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
 // Edits further apart than this belong to different bursts: one runner command's characters arrive
 // well inside it, and two commands are separated by at least a commit-wait poll and a status read.
 static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
+static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
@@ -293,8 +306,31 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
     }
     [self updateTextEntryWriteBackStatus];
   }
+  self.textEntryDigitSlots.text = textField.text;
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
       textField.text.length > 0) {
+    [textField removeFromSuperview];
+  }
+  // An auto-submitting one-time-code field: the last digit navigates away, to a screen whose own
+  // input takes the code field's place or to one without an input. `replace-after-input` is the
+  // same navigation landing before the code is complete.
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  BOOL codeComplete = textField.text.length >= AgentDeviceTextEntryAutoSubmitLength;
+  if (textField.superview == nil) {
+    return;
+  }
+  if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
+      (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
+    UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
+    if (![arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+    }
+    nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
+    [textField.superview addSubview:nextScreenField];
+    [textField removeFromSuperview];
+    [nextScreenField becomeFirstResponder];
+  } else if (codeComplete &&
+             [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
     [textField removeFromSuperview];
   }
 }
@@ -339,8 +375,13 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
-    UITextField *textField = [[UITextField alloc] init];
-    textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    BOOL digitCountValue =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-digit-count-value"];
+    UITextField *textField =
+        digitCountValue ? [[AgentDeviceDigitCountTextField alloc] init] : [[UITextField alloc] init];
+    if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    }
     textField.borderStyle = UITextBorderStyleRoundedRect;
     // An empty input view keeps the software keyboard down, which is the hardware-keyboard responder
     // these routes are addressed to. `--agent-device-text-entry-soft-keyboard` leaves the real input
@@ -374,6 +415,17 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
         [self.textEntryWriteBackStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
       ]];
       [self updateTextEntryWriteBackStatus];
+    }
+    if (digitCountValue) {
+      // The slots an OTP screen renders next to its input: the digits the field really holds.
+      self.textEntryDigitSlots = [[UILabel alloc] init];
+      self.textEntryDigitSlots.accessibilityIdentifier = @"agent-device-text-entry-digit-slots";
+      self.textEntryDigitSlots.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.textEntryDigitSlots];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.textEntryDigitSlots.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.textEntryDigitSlots.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
     }
   }
 

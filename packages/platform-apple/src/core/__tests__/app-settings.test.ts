@@ -28,7 +28,7 @@ const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>(
 import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
@@ -315,6 +315,61 @@ test('setIosSetting location set sends simulator latitude and longitude', async 
   );
 });
 
+test('setIosSetting permission requires an app in session with the published reason', async () => {
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      return unexpectedArgs(args);
+    },
+    async () => {
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', undefined, {
+            permissionTarget: 'camera',
+          }),
+        {
+          code: 'INVALID_ARGS',
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
+    },
+  );
+});
+
+test('setIosSetting location refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(() => setIosSetting(IOS_TEST_SIMULATOR, 'location', 'on'), {
+        code: 'INVALID_ARGS',
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+        dispatched: 'no',
+      });
+    },
+  );
+});
+
+test('setIosSetting clear-app-state refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(
+        () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
+        {
+          code: 'INVALID_ARGS',
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
+    },
+  );
+});
+
 test('setIosSetting appearance toggle flips current simulator appearance', async () => {
   await withFakeAppleTool(
     (args) => {
@@ -389,11 +444,20 @@ test('setIosSetting permission grant all passes all through as one simctl call',
   );
 });
 
-test('setIosSetting clear-app-state wipes app data and keeps the container manager metadata', async () => {
+test('setIosSetting clear-app-state leaves a fresh-install data container layout', async () => {
   const containerPath = await mkdtempForTest('agent-device-ios-clear-app-state-container-');
   const metadataFile = '.com.apple.mobile_container_manager.metadata.plist';
-  await fs.mkdir(path.join(containerPath, 'Documents'), { recursive: true });
-  await fs.writeFile(path.join(containerPath, 'Documents', 'db.sqlite'), 'db');
+  for (const [file, content] of Object.entries({
+    'Documents/db.sqlite': 'db',
+    'Library/Caches/blob': 'cache',
+    'Library/Preferences/com.example.app.plist': 'prefs',
+    'Library/Application Support/state.json': 'state',
+    'SystemData/com.apple.state': 'system',
+    'tmp/download.tmp': 'partial download',
+  })) {
+    await fs.mkdir(path.dirname(path.join(containerPath, file)), { recursive: true });
+    await fs.writeFile(path.join(containerPath, file), content);
+  }
   await fs.writeFile(path.join(containerPath, 'Library.plist'), 'prefs');
   await fs.writeFile(path.join(containerPath, '.app-dotfile'), 'app data');
   await fs.writeFile(path.join(containerPath, metadataFile), 'metadata');
@@ -416,7 +480,15 @@ test('setIosSetting clear-app-state wipes app data and keeps the container manag
       );
       assert.equal(result?.cleared, true);
       assert.equal(result?.bundleId, 'com.example.app');
-      assert.deepEqual(await fs.readdir(containerPath), [metadataFile]);
+      assert.deepEqual((await fs.readdir(containerPath, { recursive: true })).sort(), [
+        metadataFile,
+        'Documents',
+        'Library',
+        'Library/Caches',
+        'Library/Preferences',
+        'SystemData',
+        'tmp',
+      ]);
       assert.equal(await fs.readFile(path.join(containerPath, metadataFile), 'utf8'), 'metadata');
 
       const flat = calls.map((args) => args.join(' '));

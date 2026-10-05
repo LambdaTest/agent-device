@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -156,7 +155,6 @@ async function uploadAppIfNeeded(
   }
   const uploadApp = session.prepared.uploadApp ?? options.uploadApp;
   if (!uploadApp) return undefined;
-  await assertUploadableFile(options.provider, appPath);
   return await uploadApp({
     provider: options.provider,
     lease: session.lease,
@@ -166,21 +164,6 @@ async function uploadAppIfNeeded(
     options: installOptions,
     signal,
   });
-}
-
-/** Hosted upload APIs take one file; an extracted `.app` with no declared archive is a directory. */
-async function assertUploadableFile(provider: string, appPath: string): Promise<void> {
-  const stat = await fs.stat(appPath).catch(() => undefined);
-  if (!stat || stat.isFile()) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${provider} can only upload an app file, not a directory: ${appPath}`,
-    {
-      provider,
-      appPath,
-      hint: 'Zip the iOS simulator .app bundle and install the .zip, or install the .ipa, .apk, or .aab.',
-    },
-  );
 }
 
 function deploymentResult(

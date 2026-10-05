@@ -106,11 +106,37 @@ test('BrowserStack passes bs:// ids and URLs to the hub and uploads only local p
   }
 });
 
+test('BrowserStack refuses a directory typed before any upload request on every route', async () => {
+  const tempDir = await mkdtempForTest('agent-device-browserstack-directory-');
+  const bundlePath = path.join(tempDir, 'App.app');
+  try {
+    await fs.mkdir(bundlePath);
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
+    const refusedTyped = (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.message, `BrowserStack can only upload a regular app file: ${bundlePath}`);
+      assert.equal(error.details?.provider, 'browserstack');
+      return true;
+    };
+
+    await assert.rejects(uploadBrowserStackApp(bundlePath, upload), refusedTyped);
+    await assert.rejects(
+      resolveBrowserStackAppReference('App.app', { ...upload, cwd: tempDir }),
+      refusedTyped,
+    );
+    assert.equal(fetchSpy.mock.calls.length, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('BrowserStack session details lookup has a deadline and fails typed', async () => {
   const lookup = async () =>
     await listBrowserStackCloudArtifacts('browserstack', 'SESSION1', upload);
-  // The deadline is the only thing that ends a hung lookup: the fetch stays pending until the
-  // signal the lookup armed for 15 s aborts, so removing the deadline would hang this test.
+  // The fetch stays pending until the signal the lookup armed aborts, so only the 15 s deadline
+  // can end it; without that deadline the timeout spy is never called and the next assert fails.
   const deadline = new AbortController();
   const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
   let started: () => void = () => {};
@@ -173,4 +199,42 @@ test('BrowserStack session details keep a query on the endpoint override', async
   });
   assert.deepEqual(calls, ['https://api.example.test/sessions/SESSION1.json?region=eu']);
   assert.equal(result?.status, 'pending');
+});
+
+test('BrowserStack canonicalizes the bs:// scheme and refuses an id outside its grammar or a directory', async () => {
+  const tempDir = await mkdtempForTest('agent-device-browserstack-ref-');
+  const fetched: string[] = [];
+  globalThis.fetch = async (input) => {
+    fetched.push(String(input));
+    return new Response(JSON.stringify({ app_url: 'bs://uploaded' }), { status: 200 });
+  };
+  const resolve = async (app: string) =>
+    await resolveBrowserStackAppReference(app, { ...upload, cwd: tempDir });
+  try {
+    await fs.mkdir(path.join(tempDir, 'App.app'));
+    assert.equal(await resolve('BS://app-id'), 'bs://app-id');
+    assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
+    for (const app of ['bs://', 'bs://a b', 'Bs://a/b']) {
+      await assert.rejects(resolve(app), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.message, `BrowserStack --provider-app ${app} is not a bs:// app id.`);
+        assert.deepEqual(error.details, {
+          providerApp: app,
+          hint: 'Pass <bs://app-id-or-local-path>.',
+        });
+        return true;
+      });
+    }
+    await assert.rejects(
+      resolve('App.app'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        /can only upload a regular app file: .*App\.app$/.test(error.message),
+    );
+    assert.deepEqual(fetched, []);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });

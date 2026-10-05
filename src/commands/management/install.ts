@@ -204,7 +204,7 @@ function resolveInstallSource(positionals: string[], flags: CliFlags) {
   }
   if (githubArtifactSource) return githubArtifactSource;
   if (configuredSource) return configuredSource;
-  if (!/^https?:\/\//i.test(url!)) {
+  if (!isHttpUrl(url!)) {
     throw new AppError('INVALID_ARGS', `install-from-source <url> must be an http(s) URL: ${url}`, {
       hint: 'Install a local build with install <app> <path>.',
     });
@@ -214,6 +214,11 @@ function resolveInstallSource(positionals: string[], flags: CliFlags) {
     url: url!,
     headers: parseInstallSourceHeaders(flags.header),
   };
+}
+
+function isHttpUrl(value: string): boolean {
+  const protocol = URL.parse(value)?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 function parseInstallSourceHeaders(

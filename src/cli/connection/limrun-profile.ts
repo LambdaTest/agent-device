@@ -8,6 +8,10 @@ import { LIMRUN_PROFILE_FIELDS } from '@agent-device/provider-limrun';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
+import {
+  limrunInstanceVariables,
+  readLimrunCredentials,
+} from '../../provider-limrun-credentials.ts';
 
 const DEFAULT_LIMRUN_TENANT = 'limrun';
 export function resolveLimrunConnectProfile(options: {
@@ -17,14 +21,18 @@ export function resolveLimrunConnectProfile(options: {
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
   const env = options.env ?? process.env;
-  const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) {
-    throw new AppError('INVALID_ARGS', 'connect limrun requires LIMRUN_API_KEY.', {
-      hint: 'Set LIMRUN_API_KEY in the environment before running agent-device connect limrun.',
-    });
-  }
-
   const profile = buildLimrunRemoteProfile({ flags: options.flags });
+  const credentials = readLimrunCredentials(env);
+  const platform = profile.leaseBackend === 'ios-instance' ? 'ios' : 'android';
+  if (!credentials?.apiKey && !credentials?.instances?.[platform]) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `connect limrun requires LIMRUN_API_KEY, or ${limrunInstanceVariables(platform).join(', ')} for an existing instance.`,
+      {
+        hint: 'Set the credentials in the environment before running agent-device connect limrun.',
+      },
+    );
+  }
   return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,
     provider: 'limrun',

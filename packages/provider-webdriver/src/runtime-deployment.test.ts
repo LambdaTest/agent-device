@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createBrowserStackUploadApp } from './browserstack.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { createWebDriverDeploymentRuntime } from './runtime-deployment.ts';
 import type { WebDriverProviderSession } from './runtime-session.ts';
@@ -94,7 +95,7 @@ test('a hosted upload sends the file the materializer names, else the installabl
     provider: 'webdriver-test',
     uploadApp: async ({ appPath }) => {
       uploaded.push(appPath);
-      return { appReference: `lt://${uploaded.length}` };
+      return { appReference: `hub://${uploaded.length}` };
     },
     findSessionForDevice: () => activeSession(installApp),
   });
@@ -121,19 +122,25 @@ test('a hosted upload sends the file the materializer names, else the installabl
 
   expect(uploaded).toEqual(['/m/App.app.zip', '/m/x/App.ipa', '/m/x/App.app', '/m/x/app.apk']);
   expect(result).toEqual({ bundleId: 'com.example.app', launchTarget: 'com.example.app' });
-  expect(installApp).toHaveBeenNthCalledWith(1, 'lt://1', expect.any(AbortSignal));
+  expect(installApp).toHaveBeenNthCalledWith(1, 'hub://1', expect.any(AbortSignal));
 });
 
-test('a hosted upload refuses a directory typed instead of reading it', async () => {
+test('a hosted upload refuses a directory typed before any upload request', async () => {
   const tempDir = await mkdtempForTest('agent-device-materialized-directory-');
   try {
     const installablePath = path.join(tempDir, 'extracted', 'App.app');
     await fs.mkdir(installablePath, { recursive: true });
-    const uploadApp = vi.fn<CloudWebDriverUploadApp>();
+    const fetchSpy = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchSpy;
     const installApp = vi.fn(async () => undefined);
     const deployment = createWebDriverDeploymentRuntime({
       provider: 'browserstack',
-      uploadApp,
+      uploadApp: createBrowserStackUploadApp({
+        clientVersion: '0.0.0-test',
+        username: 'user',
+        accessKey: 'key',
+        endpoint: 'https://upload.example.test/app',
+      }),
       findSessionForDevice: () => activeSession(installApp),
     });
 
@@ -145,9 +152,10 @@ test('a hosted upload refuses a directory typed instead of reading it', async ()
       ),
     ).rejects.toMatchObject({
       code: 'INVALID_ARGS',
-      message: `browserstack can only upload an app file, not a directory: ${installablePath}`,
+      message: `BrowserStack can only upload a regular app file: ${installablePath}`,
+      details: expect.objectContaining({ provider: 'browserstack' }),
     });
-    expect(uploadApp).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(installApp).not.toHaveBeenCalled();
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -174,6 +182,44 @@ test('a provider without an uploader still installs the materialized bundle path
     new AbortController().signal,
   );
   expect(installApp).toHaveBeenCalledWith('/m/extracted/App.app', expect.any(AbortSignal));
+});
+
+test('a hosted upload reads the zipped simulator build that install-from-source extracted', async () => {
+  const tempDir = await mkdtempForTest('agent-device-materialized-upload-');
+  try {
+    const archivePath = path.join(tempDir, 'App.app.zip');
+    const installablePath = path.join(tempDir, 'extracted', 'App.app');
+    await fs.writeFile(archivePath, 'zip bytes');
+    await fs.mkdir(installablePath, { recursive: true });
+    const uploadedBytes: string[] = [];
+    const installApp = vi.fn(async () => undefined);
+    const deployment = createWebDriverDeploymentRuntime({
+      provider: 'webdriver-test',
+      uploadApp: async ({ appPath }) => {
+        uploadedBytes.push(await fs.readFile(appPath, 'utf8'));
+        return { appReference: 'hub://APP42' };
+      },
+      findSessionForDevice: () => activeSession(installApp),
+    });
+
+    await deployment.deployMaterializedApp(
+      iosDevice,
+      {
+        artifact: {
+          archivePath,
+          installablePath,
+          uploadPath: archivePath,
+          cleanup: async () => {},
+        },
+      },
+      new AbortController().signal,
+    );
+
+    expect(uploadedBytes).toEqual(['zip bytes']);
+    expect(installApp).toHaveBeenCalledWith('hub://APP42', expect.any(AbortSignal));
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 function activeSession(

@@ -2,17 +2,12 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
+import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '../daemon-resolution.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
-import {
-  removeDaemonInfo,
-  removeDaemonLock,
-  stopDaemonProcessForTakeover,
-  type DaemonInfo,
-} from './daemon-client-metadata.ts';
+import type { DaemonInfo } from './daemon-client-metadata.ts';
 
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
@@ -40,7 +35,7 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
   return platform !== undefined && AFFIRMATIVE_APPLE_PLATFORM_SELECTORS.has(platform);
 }
 
-export function handleRequestTimeout(
+export async function handleRequestTimeout(
   params: Readonly<{
     info: DaemonInfo;
     statePaths: DaemonPaths;
@@ -53,11 +48,11 @@ export function handleRequestTimeout(
     session?: string;
     action?: string;
   }>,
-): AppError {
+): Promise<AppError> {
   const { info, statePaths, remote, timeoutMs, requestId, command, platform, session, action } =
     params;
-  // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
-  // timeout, on purpose: the request's declared --platform is not
+  // Cleanup eligibility never depends on the declared platform, on purpose:
+  // the request's declared --platform is not
   // authoritative for session-bound execution. An existing session's real
   // device platform can silently override a conflicting declared selector
   // (`applyStripLockPolicy` in request-lock-policy.ts, reached via
@@ -67,11 +62,22 @@ export function handleRequestTimeout(
   // Apple-process-name-specific, so sweeping them on a non-Apple host or
   // session matches nothing and costs a few no-op subprocess spawns, never
   // a wrong skip.
-  const cleanup = remote ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
+  // `record` is excluded by command, which is authoritative: on a physical iOS device or macOS the
+  // runner is the recorder, and the sweep would kill the export the preserved daemon is finishing.
+  const sweepRunnerBuilds = !remote && command !== PUBLIC_COMMANDS.record;
+  const cleanup = sweepRunnerBuilds ? cleanupTimedOutIosRunnerBuilds() : { terminated: 0 };
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
-  const daemonReset = resetDaemon
-    ? resetDaemonAfterTimeout(info, statePaths)
-    : { forcedKill: false };
+  let retirement: DaemonRetirementResult | undefined;
+  if (resetDaemon) {
+    const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+    retirement = await stopAndRetireDaemon({
+      paths: statePaths,
+      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+      mode: 'force',
+    });
+  }
+  const preserved =
+    retirement?.status === 'retained' && retirement.termination?.status !== 'exited';
   // The HINT, unlike cleanup, may only name Apple-runner involvement on
   // evidence this call site actually has: an explicitly declared Apple
   // platform selector, or the cleanup itself having terminated a matching
@@ -89,9 +95,10 @@ export function handleRequestTimeout(
       command,
       timedOutRunnerPidsTerminated: cleanup.terminated,
       timedOutRunnerCleanupError: cleanup.error,
-      daemonPidReset: resetDaemon ? info.pid : undefined,
-      daemonPidForceKilled: resetDaemon ? daemonReset.forcedKill : undefined,
-      daemonPreservedAfterTimeout: !remote && !resetDaemon,
+      daemonPidReset: retirement?.status === 'retired' ? info.pid : undefined,
+      daemonPidForceKilled: resetDaemon ? daemonWasForceKilled(retirement) : undefined,
+      daemonRetirement: retirement,
+      daemonPreservedAfterTimeout: preserved || (!remote && !resetDaemon),
       daemonBaseUrl: info.baseUrl,
     },
   });
@@ -99,15 +106,25 @@ export function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
-    hint: resolveRequestTimeoutHint({
-      remote,
-      resetDaemon,
-      command,
-      appleCleanupEvidence,
-      session,
-      action,
-    }),
+    ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
+    hint:
+      retirement?.status === 'retained'
+        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Retry with --debug and inspect daemon diagnostics before retrying.'}`
+        : resolveRequestTimeoutHint({
+            remote,
+            resetDaemon,
+            command,
+            appleCleanupEvidence,
+            session,
+            action,
+          }),
   });
+}
+
+function daemonWasForceKilled(retirement: DaemonRetirementResult | undefined): boolean {
+  if (!retirement || retirement.status === 'absent') return false;
+  const termination = retirement.termination;
+  return termination?.status === 'exited' && termination.mode === 'forced';
 }
 
 // Whether a timed-out request tears down the local daemon is declared on the
@@ -136,15 +153,15 @@ export function resolveRequestTimeoutHint(params: {
   session?: string;
 }): string {
   const { remote, resetDaemon, command, appleCleanupEvidence, session, action } = params;
+  // A daemon that survives this client window may still be exporting a `record stop` that ran out
+  // of time (a stop still queued for the device lock is dropped before any export starts), and a
+  // finished file stays retrievable by asking again. A reset daemon makes no such promise.
+  if (!resetDaemon && command === PUBLIC_COMMANDS.record && action === 'stop') {
+    return `The ${remote ? 'remote ' : ''}daemon may still be exporting the recording. Run agent-device record stop${
+      session ? ` --session ${session}` : ''
+    } again to wait for that export and receive the completed recording.`;
+  }
   if (remote) {
-    // A remote daemon survives this client window, so a `record stop` that ran out of time is still
-    // exporting there and its finished file stays retrievable by asking again. A local timeout
-    // resets the daemon mid-export, where that promise would be false.
-    if (command === PUBLIC_COMMANDS.record && action === 'stop') {
-      return `The remote daemon is still exporting the recording. Run agent-device record stop${
-        session ? ` --session ${session}` : ''
-      } again to wait for that export and receive the completed recording.`;
-    }
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (!resetDaemon) {
@@ -176,20 +193,4 @@ function cleanupTimedOutIosRunnerBuilds(): { terminated: number; error?: string 
       error: error instanceof Error ? error.message : String(error),
     };
   }
-}
-
-function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): { forcedKill: boolean } {
-  let forcedKill = false;
-  try {
-    if (isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
-      process.kill(info.pid, 'SIGKILL');
-      forcedKill = true;
-    }
-  } catch {
-    void stopDaemonProcessForTakeover(info);
-  } finally {
-    removeDaemonInfo(paths.infoPath);
-    removeDaemonLock(paths.lockPath);
-  }
-  return { forcedKill };
 }

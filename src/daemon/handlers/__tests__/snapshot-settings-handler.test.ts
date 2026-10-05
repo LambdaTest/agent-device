@@ -26,6 +26,7 @@ import {
   tvOsSimulatorDevice,
 } from './snapshot-handler.fixtures.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -80,7 +81,7 @@ beforeEach(() => {
 test('settings rejects unsupported iOS physical devices', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -109,7 +110,7 @@ test('settings rejects unsupported iOS physical devices', async () => {
 test('settings clear-app-state dispatches explicit app id without an active app session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-clear-state';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', {
@@ -131,7 +132,7 @@ test('settings clear-app-state dispatches explicit app id without an active app 
 test('settings clear-app-state rejects missing app id when no app session is bound', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-clear-state-missing-app';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['clear-app-state'] }),
@@ -144,6 +145,8 @@ test('settings clear-app-state rejects missing app id when no app session is bou
   if (response?.ok === false) {
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/requires an app id/i);
+    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired);
+    expect(response.error.details?.dispatched).toBe('no');
   }
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
@@ -151,7 +154,7 @@ test('settings clear-app-state rejects missing app id when no app session is bou
 test('settings reset-keychain dispatches without an app id or active app session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-reset-keychain';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', {
@@ -172,7 +175,7 @@ test('settings reset-keychain dispatches without an app id or active app session
 test('settings reset-keychain rejects an extra app argument instead of dropping it', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-reset-keychain-extra-arg';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', {
@@ -193,7 +196,7 @@ test('settings reset-keychain rejects an extra app argument instead of dropping 
 test('settings text-size reads the category the owner holds without mutating anything', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-text-size-read';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size'] }),
@@ -216,7 +219,7 @@ test('settings text-size reads the category the owner holds without mutating any
 test('settings text-size refuses the macOS host on both legs with the same code', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-text-size-read';
-  sessionStore.set(sessionName, makeSession(sessionName, macOsDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
 
   const read = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size'] }),
@@ -247,7 +250,7 @@ test('settings text-size applies a ladder category through the write leg', async
   const sessionName = 'ios-text-size-write';
   const session = makeSession(sessionName, iosSimulatorDevice);
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', {
@@ -278,7 +281,7 @@ test('settings text-size refuses an Apple leaf with no content size before it ex
   const sessionName = 'tvos-text-size';
   const session = makeSession(sessionName, tvOsSimulatorDevice);
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   for (const positionals of [['text-size'], ['text-size', 'large']]) {
     const response = await handleSnapshotCommands({
@@ -304,7 +307,7 @@ test('settings text-size refuses an Apple leaf with no content size before it ex
 test('settings text-size refuses an off-ladder category with the whole ladder', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-text-size-invalid';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size', 'gigantic'] }),
@@ -349,7 +352,7 @@ test('settings usage hint documents canonical faceid states', async () => {
 test('settings on macOS rejects wifi before dispatch with explicit subset guidance', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-settings-wifi';
-  sessionStore.set(sessionName, makeSession(sessionName, macOsDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['wifi', 'on'] }),

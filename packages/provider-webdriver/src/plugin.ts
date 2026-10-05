@@ -14,7 +14,6 @@ export type {
 export {
   appFileUploadForm,
   appendUrlPath,
-  asRecord,
   createHubUploadApp,
   fetchProviderSessionDetails,
   fetchProviderVerificationJson,

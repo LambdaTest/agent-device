@@ -82,7 +82,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         let providerData: Record<string, unknown> | undefined;
         // A hosted provider can take longer than the lease TTL to create its session; the work
         // pass keeps the lease alive until it does, and ending the pass restarts the TTL then.
-        const work = leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId));
+        const work = leaseLifecycleProvider?.allocate
+          ? leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId))
+          : undefined;
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req),
@@ -94,7 +96,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           if (!reused) leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
           throw error;
         } finally {
-          work.release();
+          work?.release();
         }
         if (isRequestCanceled(requestId)) {
           // The requester left while the provider was allocating; the lease it

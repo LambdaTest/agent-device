@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { asOptionalRecord } from '@agent-device/kernel/record';
 import {
   appendUrlPath,
-  asRecord,
   fetchProviderVerificationJson,
 } from '@agent-device/provider-webdriver/plugin';
 import {
@@ -147,7 +147,6 @@ async function fetchTestMuJson(
     hints: {
       service: 'TestMu AI',
       unauthorizedHint: 'Check LT_USERNAME and LT_ACCESS_KEY.',
-      serviceHint: 'Retry connect or check the TestMu AI service status.',
       networkHint:
         'Check network access to mobile-api.lambdatest.com and manual-api.lambdatest.com, then retry connect.',
     },
@@ -166,9 +165,11 @@ function readTestMuCatalogDevices(
 ): Array<{ name: string; osVersions: string[] }> {
   const platformCatalog =
     deviceType === 'real'
-      ? asRecord(asRecord(value)?.[platform])
-      : asRecord(asRecord(asRecord(asRecord(value)?.app)?.devices)?.[platform]);
-  const brandRecord = asRecord(platformCatalog?.brands);
+      ? asOptionalRecord(asOptionalRecord(value)?.[platform])
+      : asOptionalRecord(
+          asOptionalRecord(asOptionalRecord(asOptionalRecord(value)?.app)?.devices)?.[platform],
+        );
+  const brandRecord = asOptionalRecord(platformCatalog?.brands);
   if (!brandRecord) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -179,7 +180,7 @@ function readTestMuCatalogDevices(
   return Object.values(brandRecord).flatMap((devices) => {
     if (!Array.isArray(devices)) return [];
     return devices.flatMap((entry) => {
-      const record = asRecord(entry);
+      const record = asOptionalRecord(entry);
       if (!record || typeof record.name !== 'string' || !Array.isArray(record.osVersion)) return [];
       const osVersions = record.osVersion.flatMap((osVersion) =>
         typeof osVersion === 'string' || typeof osVersion === 'number' ? [String(osVersion)] : [],
@@ -193,13 +194,13 @@ function readTestMuCatalogDevices(
 function readTestMuApps(
   value: unknown,
 ): Array<{ name?: string; reference: string; version?: string }> {
-  const record = asRecord(value);
+  const record = asOptionalRecord(value);
   const data = record?.data;
   if (!Array.isArray(data)) {
     throw new AppError('COMMAND_FAILED', 'TestMu AI app listing response was not a list.');
   }
   return data.flatMap((entry) => {
-    const app = asRecord(entry);
+    const app = asOptionalRecord(entry);
     if (!app || typeof app.app_id !== 'string') return [];
     const reference = testMuAppReferenceFromId(app.app_id);
     return [

@@ -163,7 +163,7 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
         (error: unknown) =>
           error instanceof AppError &&
           error.code === 'INVALID_ARGS' &&
-          error.message.includes('valid'),
+          /valid lt:\/\/ app reference|is not a bs:\/\/ app id/.test(error.message),
       );
     }
   } finally {

@@ -1,10 +1,10 @@
 import {
   CLOUD_WEBDRIVER_PROFILE_FIELDS,
   CLOUD_WEBDRIVER_PROVIDERS,
+  parseBrowserStackAppReference,
   readAwsDeviceFarmRegionFromArn,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
-import { isBrowserStackAppReference } from '@agent-device/provider-webdriver/providers';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -94,54 +94,29 @@ function requireConnectProfileBuilder(
   throw new AppError('INVALID_ARGS', `Unsupported cloud WebDriver provider "${provider}".`);
 }
 
-/** A hosted Appium hub picks its device by exact name + OS version and installs one app reference. */
-type HubProviderProfile = {
-  command: string;
-  label: string;
-  credentialEnv: readonly [string, string];
-  /** Scheme of the provider's own app references, e.g. `bs://` or `lt://`. */
-  appScheme: string;
-  /** The hub's own reference grammar, checked here so a malformed id fails at connect. */
-  isAppReference: (reference: string) => boolean;
-  appHint: string;
-};
-
-const BROWSERSTACK_HUB_PROFILE: HubProviderProfile = {
-  command: 'connect browserstack',
-  label: 'BrowserStack',
-  credentialEnv: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
-  appScheme: 'bs://',
-  isAppReference: isBrowserStackAppReference,
-  appHint: '<bs://app-id-or-local-path>',
-};
-
 function browserStackProfileFields(options: {
   flags: CliFlags;
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
-  return hubProviderProfileFields(BROWSERSTACK_HUB_PROFILE, options);
-}
-
-function hubProviderProfileFields(
-  hub: HubProviderProfile,
-  options: { flags: CliFlags; env?: EnvMap; cwd: string },
-): RemoteConfigProfile {
-  for (const name of hub.credentialEnv) requireEnv(options.env, name, hub.command);
+  requireEnv(options.env, 'BROWSERSTACK_USERNAME', 'connect browserstack');
+  requireEnv(options.env, 'BROWSERSTACK_ACCESS_KEY', 'connect browserstack');
   const platform = requireCloudWebDriverPlatform(
     options.flags.platform,
-    `${hub.command} requires --platform ios|android.`,
+    'connect browserstack requires --platform ios|android.',
   );
-  const device = requireFlag(options.flags.device, `${hub.command} requires --device <name>.`);
+  const device = requireFlag(
+    options.flags.device,
+    'connect browserstack requires --device <name>.',
+  );
   const providerOsVersion = requireFlag(
     options.flags.providerOsVersion,
-    `${hub.command} requires --provider-os-version <version>.`,
+    'connect browserstack requires --provider-os-version <version>.',
   );
-  const providerApp = normalizeHubAppReference(
-    hub,
+  const providerApp = normalizeBrowserStackAppReference(
     requireFlag(
       options.flags.providerApp,
-      `${hub.command} requires --provider-app ${hub.appHint}.`,
+      'connect browserstack requires --provider-app <bs://app-id-or-local-path>.',
     ),
     options.cwd,
   );
@@ -157,25 +132,17 @@ function hubProviderProfileFields(
   };
 }
 
-function normalizeHubAppReference(hub: HubProviderProfile, app: string, cwd: string): string {
+function normalizeBrowserStackAppReference(app: string, cwd: string): string {
   if (/^https?:\/\//i.test(app)) return app;
-  // URI schemes are case-insensitive; the hub only matches the lower-case spelling.
-  if (app.slice(0, hub.appScheme.length).toLowerCase() === hub.appScheme) {
-    const reference = `${hub.appScheme}${app.slice(hub.appScheme.length)}`;
-    if (hub.isAppReference(reference)) return reference;
-    throw new AppError(
-      'INVALID_ARGS',
-      `${hub.command} --provider-app ${app} is not a valid ${hub.appScheme} app reference.`,
-      { hint: `Pass ${hub.appHint}.` },
-    );
-  }
+  const reference = parseBrowserStackAppReference(app);
+  if (reference !== undefined) return reference;
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;
   } catch {
     // Report one stable profile error below.
   }
-  throw new AppError('INVALID_ARGS', `${hub.label} app file not found: ${resolvedPath}`);
+  throw new AppError('INVALID_ARGS', `BrowserStack app file not found: ${resolvedPath}`);
 }
 
 function awsDeviceFarmProfileFields(options: {

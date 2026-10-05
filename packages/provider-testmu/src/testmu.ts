@@ -5,7 +5,6 @@ import {
   urlArtifactFromDetails,
   appendUrlPath,
   appFileUploadForm,
-  asRecord,
   createHubUploadApp,
   fetchProviderSessionDetails,
   postHubAppUpload,
@@ -16,6 +15,7 @@ import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
+import { asOptionalRecord } from '@agent-device/kernel/record';
 import { isTestMuAppReference } from './providers.ts';
 
 /**
@@ -99,7 +99,10 @@ export async function uploadTestMuApp(
           : 'Zip the .app bundle of an iOS simulator build and pass the .zip.',
     });
   }
-  const form = await appFileUploadForm(appPath, 'appFile');
+  const form = await appFileUploadForm(appPath, 'appFile', {
+    provider: 'testmu',
+    service: 'TestMu AI',
+  });
   form.set('name', path.parse(appPath).name);
   return await postTestMuUpload(form, options, signal);
 }
@@ -147,16 +150,34 @@ export async function resolveTestMuAppReference(
   app: string,
   options: TestMuUploadOptions & { cwd?: string; signal?: AbortSignal },
 ): Promise<string> {
+  const reference = parseTestMuAppReference(app);
+  if (reference !== undefined) return reference;
+  if (/^https?:\/\//i.test(app)) {
+    return await uploadTestMuAppFromUrl(app, options, options.signal);
+  }
   return await resolveHubAppReference({
     service: 'TestMu AI',
     app,
     cwd: options.cwd,
-    referenceScheme: 'lt://',
     referenceLabel: 'an lt:// app id',
-    isReference: isTestMuAppReference,
+    parseReference: parseTestMuAppReference,
     uploadFile: async (appPath, signal) => await uploadTestMuApp(appPath, options, signal),
-    uploadUrl: async (url, signal) => await uploadTestMuAppFromUrl(url, options, signal),
     signal: options.signal,
+  });
+}
+
+const TESTMU_APP_SCHEME = 'lt://';
+
+/**
+ * The canonical `lt://` reference for `app` (URI schemes are case-insensitive; the hub matches the
+ * lower-case spelling), or undefined when `app` does not use the scheme.
+ */
+function parseTestMuAppReference(app: string): string | undefined {
+  if (app.slice(0, TESTMU_APP_SCHEME.length).toLowerCase() !== TESTMU_APP_SCHEME) return undefined;
+  const reference = `${TESTMU_APP_SCHEME}${app.slice(TESTMU_APP_SCHEME.length)}`;
+  if (isTestMuAppReference(reference)) return reference;
+  throw new AppError('INVALID_ARGS', `TestMu AI --provider-app ${app} is not an lt:// app id.`, {
+    providerApp: app,
   });
 }
 
@@ -190,7 +211,7 @@ export function buildTestMuCapabilities(
       video: true,
       devicelog: true,
       ...deviceFeatures,
-      ...(asRecord(configuredLtOptions) ?? {}),
+      ...(asOptionalRecord(configuredLtOptions) ?? {}),
       // A configured value cannot switch the device pool or drop the W3C dialect agent-device speaks.
       isRealMobile: options.deviceType === 'real',
       w3c: true,
@@ -224,7 +245,7 @@ async function fetchTestMuSessionDetails(
     throw error;
   }
   // The API wraps the session in a jsend envelope: `{ status, data: {...}, message }`.
-  const details = asRecord(json.data);
+  const details = asOptionalRecord(json.data);
   if (!details) {
     throw new AppError('COMMAND_FAILED', 'TestMu AI session details response had no data.', {
       response: json,
@@ -271,7 +292,7 @@ function mapTestMuArtifacts(
 
 /** The upload answers with `app_url` (`lt://…`) and/or a bare `app_id`; anything else is a failed upload. */
 function readTestMuAppReference(value: unknown): string | undefined {
-  const { app_url: appUrl, app_id: appId } = asRecord(value) ?? {};
+  const { app_url: appUrl, app_id: appId } = asOptionalRecord(value) ?? {};
   if (typeof appUrl === 'string' && isTestMuAppReference(appUrl)) return appUrl;
   if (typeof appId !== 'string') return undefined;
   const reference = testMuAppReferenceFromId(appId);
