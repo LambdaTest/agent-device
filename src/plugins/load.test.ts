@@ -111,3 +111,11 @@ test('WebDriver plugins use the shared engine and refuse mismatched providers', 
   selectPlugin(other.home, 'example', 'wrong', source);
   await assert.rejects(loadProviderPlugins(other.env, []), { code: 'INVALID_ARGS' });
 });
+
+test('a factory returning a primitive is refused as an invalid plugin', async () => {
+  for (const value of ['42', '"runtime"', 'true']) {
+    const { home, env } = pluginHome();
+    selectPlugin(home, 'example', 'example', `export default () => ${value};`);
+    await assert.rejects(loadProviderPlugins(env, []), { code: 'INVALID_ARGS' });
+  }
+});

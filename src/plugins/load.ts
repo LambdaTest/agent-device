@@ -82,7 +82,7 @@ async function instantiateProviderPlugin(
         >
   )(host);
   let registration: ProviderPluginRegistration;
-  if (result && 'webDriver' in result) {
+  if (result && typeof result === 'object' && 'webDriver' in result) {
     if (result.webDriver?.provider !== plugin.agentDevicePlugin.provider) {
       throw new AppError(
         'INVALID_ARGS',
