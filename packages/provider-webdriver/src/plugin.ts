@@ -23,3 +23,10 @@ export {
 } from './webdriver-utils.ts';
 export { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
 export { buildCloudWebDriverBaseCapabilities } from './capabilities.ts';
+export {
+  readFlag,
+  requireEnv,
+  requireFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from './webdriver-utils.ts';

@@ -2,9 +2,14 @@ import type { ProviderPluginHost } from 'agent-device/plugins';
 import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
 import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
-import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
-import { buildCloudWebDriverBaseCapabilities } from '@agent-device/provider-webdriver/plugin';
+import {
+  buildCloudWebDriverBaseCapabilities,
+  readFlag,
+  requireEnv,
+  requireFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from '@agent-device/provider-webdriver/plugin';
 import { createTestMuConnection } from './connection.ts';
 const TESTMU_WEBDRIVER_ENDPOINT = 'https://mobile-hub.lambdatest.com/wd/hub/';
 const TESTMU_CAPABILITY_OVERRIDES = {
@@ -152,45 +157,4 @@ function testMuAppUploadEndpoint(
   return deviceType === 'real'
     ? env.TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT
     : env.TESTMU_APP_UPLOAD_ENDPOINT;
-}
-
-function requireRequest(
-  req: LeaseLifecycleContext | undefined,
-  providerLabel: string,
-): LeaseLifecycleContext {
-  if (req) return req;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${providerLabel} lease allocation requires provider profile flags on the request.`,
-  );
-}
-
-function requireRequestPlatform(
-  req: LeaseLifecycleContext,
-  providerLabel: string,
-): 'android' | 'ios' {
-  const platform = req.flags?.platform;
-  if (platform === 'android' || platform === 'ios') return platform;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires --platform ios|android.`);
-}
-
-function requireFlag(req: LeaseLifecycleContext, key: string, message: string): string {
-  const value = readFlag(req, key);
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', message);
-}
-
-function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
-  const value = req.flags?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function requireEnv(
-  env: ProviderPluginHost['env'],
-  key: keyof ProviderPluginHost['env'],
-  providerLabel: string,
-): string {
-  const value = env[key];
-  if (value?.trim()) return value;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
 }

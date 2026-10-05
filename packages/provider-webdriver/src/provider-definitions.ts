@@ -25,9 +25,15 @@ import {
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
+  readFlag,
+  requireEnv,
+  requireFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from './webdriver-utils.ts';
+import {
   buildCloudWebDriverBaseCapabilities,
   createCloudWebDriverRuntime,
-  type CloudWebDriverPlatform,
   type CloudWebDriverRuntime,
 } from './runtime.ts';
 
@@ -316,47 +322,6 @@ export function createCloudWebDriverProviderDefinitions(
       },
     },
   ];
-}
-
-function requireRequest(
-  req: LeaseLifecycleContext | undefined,
-  providerLabel: string,
-): LeaseLifecycleContext {
-  if (req) return req;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${providerLabel} lease allocation requires provider profile flags on the request.`,
-  );
-}
-
-function requireRequestPlatform(
-  req: LeaseLifecycleContext,
-  providerLabel: string,
-): CloudWebDriverPlatform {
-  const platform = req.flags?.platform;
-  if (platform === 'android' || platform === 'ios') return platform;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires --platform ios|android.`);
-}
-
-function requireFlag(req: LeaseLifecycleContext, key: string, message: string): string {
-  const value = readFlag(req, key);
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', message);
-}
-
-function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
-  const value = req.flags?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function requireEnv(
-  env: DefaultCloudWebDriverProviderRuntimeEnv,
-  key: keyof DefaultCloudWebDriverProviderRuntimeEnv,
-  providerLabel: string,
-): string {
-  const value = env[key];
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
 }
 
 function requireAwsValue(
