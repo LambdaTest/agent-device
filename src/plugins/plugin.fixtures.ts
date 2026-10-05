@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { ProviderProfileField } from '@agent-device/contracts/provider-profile-fields';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 
 export function pluginHome() {
@@ -57,4 +58,50 @@ export function registrationSource(provider: string, shutdownFile?: string) {
       platformModule: { owner: { kind: 'provider-runtime', provider: ${JSON.stringify(provider)}, instance: 'test' },
         loadRuntime: async () => { throw new Error('lazy'); } }
     });`;
+}
+
+const CONSUMED_PROFILE_FIELDS: Record<ProviderProfileField, 'consumed'> = {
+  providerApp: 'consumed',
+  providerOsVersion: 'consumed',
+  providerDeviceType: 'consumed',
+  providerProject: 'consumed',
+  providerBuild: 'consumed',
+  providerSessionName: 'consumed',
+  providerDeviceOrientation: 'consumed',
+  providerGeoLocation: 'consumed',
+  providerTimezone: 'consumed',
+  providerAppiumVersion: 'consumed',
+  providerLanguage: 'consumed',
+  providerLocale: 'consumed',
+  providerNetworkProfile: 'consumed',
+  providerCustomNetwork: 'consumed',
+  providerNoResignApp: 'consumed',
+  awsProjectArn: 'consumed',
+  awsDeviceArn: 'consumed',
+  awsAppArn: 'consumed',
+  awsRegion: 'consumed',
+  awsInteractionMode: 'consumed',
+};
+
+/** A `{ webDriver }` factory with a total field declaration; `connection` is a JS expression. */
+export function webDriverPluginSource(
+  provider: string,
+  refused: readonly ProviderProfileField[] = [],
+  connection?: string,
+) {
+  const fields = {
+    ...CONSUMED_PROFILE_FIELDS,
+    ...Object.fromEntries(refused.map((field) => [field, 'refused'])),
+  };
+  const webDriver = {
+    provider,
+    endpoint: 'https://webdriver.test/wd/hub/',
+    platform: 'android',
+    deviceName: provider,
+    profileFields: { provider, label: provider, fields },
+    requestPolicy: { retryAttempts: 0 },
+  };
+  return `export default (host) => ({ webDriver: ${JSON.stringify(webDriver)}${
+    connection ? `, connection: ${connection}` : ''
+  } });`;
 }

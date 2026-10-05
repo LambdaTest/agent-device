@@ -3,10 +3,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { loadProviderPlugins, withPluginConnection } from './load.ts';
-import { pluginHome, selectPlugin, registrationSource } from './plugin.fixtures.ts';
+import {
+  pluginHome,
+  selectPlugin,
+  registrationSource,
+  webDriverPluginSource,
+} from './plugin.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
+
+const realFetch = globalThis.fetch;
+const lease: DeviceLease = {
+  leaseId: 'lease-1',
+  tenantId: 'team-a',
+  runId: 'run-a',
+  clientId: 'client-a',
+  leaseProvider: 'example',
+  backend: 'android-instance',
+  deviceKey: 'example:device-a',
+  createdAt: 1,
+  expiresAt: 2,
+  heartbeatAt: 1,
+};
 
 test('startup loads the factory with options and the host error constructor', async () => {
   const { home, env } = pluginHome();
@@ -98,15 +117,38 @@ test('connection callbacks run from the installed plugin and always release runt
   assert.ok(fs.existsSync(marker));
 });
 
-test('WebDriver plugins use the shared engine and refuse mismatched providers', async () => {
+test('WebDriver plugins allocate through the shared engine and refuse mismatched providers', async () => {
   const { home, env } = pluginHome();
-  const source =
-    "export default () => ({ webDriver: { provider: 'example', endpoint: 'http://127.0.0.1/', platform: 'android', deviceName: 'example' } });";
+  const source = webDriverPluginSource('example', ['awsProjectArn']);
   selectPlugin(home, 'example', 'example', source);
   const [registration] = await loadProviderPlugins(env, []);
-  assert.equal(registration!.runtime.provider, 'example');
+  const runtime = registration!.runtime;
+  assert.equal(runtime.provider, 'example');
   assert.equal(registration!.platformModule.owner.provider, 'example');
-  await registration!.runtime.shutdown();
+  const requests: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push(`${init?.method ?? 'GET'} ${String(input)}`);
+    return new Response(JSON.stringify({ value: { sessionId: 'SESSION1', capabilities: {} } }));
+  };
+  try {
+    await assert.rejects(
+      runtime.leaseLifecycle.allocate!(lease, { flags: { awsProjectArn: 'arn:project' } }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.provider, 'example');
+        assert.deepEqual(error.details?.flags, ['--aws-project-arn']);
+        return true;
+      },
+    );
+    assert.deepEqual(requests, []);
+    const allocated = await runtime.leaseLifecycle.allocate!(lease, { flags: {} });
+    assert.equal(allocated?.sessionId, 'SESSION1');
+    assert.deepEqual(requests, ['POST https://webdriver.test/wd/hub/session']);
+  } finally {
+    await runtime.shutdown();
+    globalThis.fetch = realFetch;
+  }
   const other = pluginHome();
   selectPlugin(other.home, 'example', 'wrong', source);
   await assert.rejects(loadProviderPlugins(other.env, []), { code: 'INVALID_ARGS' });

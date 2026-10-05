@@ -210,4 +210,17 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
     registry.listActiveLeases().map((entry) => entry.leaseId),
     [lease.leaseId],
   );
+  assert.deepEqual(
+    registry.resolveProviderSession({
+      provider: 'cloud',
+      providerSessionId: 'session-1',
+      tenantId: 'tenant-a',
+    }),
+    {
+      provider: 'cloud',
+      providerSessionId: 'session-1',
+      leaseId: lease.leaseId,
+      tenantId: 'tenant-a',
+    },
+  );
 });

@@ -76,10 +76,13 @@ test('leases.allocate refuses a real device from Limrun instead of handing out a
       platform: 'ios',
       providerDeviceType: 'real',
     }),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      /--provider-device-type is not supported by Limrun/.test(error.message),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.provider, 'limrun');
+      assert.deepEqual(error.details?.flags, ['--provider-device-type']);
+      return true;
+    },
   );
   assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
 });
