@@ -191,6 +191,6 @@ function requireEnv(
   providerLabel: string,
 ): string {
   const value = env[key];
-  if (value) return value;
+  if (value?.trim()) return value;
   throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
 }

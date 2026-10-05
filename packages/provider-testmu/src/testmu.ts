@@ -16,7 +16,7 @@ import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contract
 import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
 import { asOptionalRecord } from '@agent-device/kernel/record';
-import { isTestMuAppReference } from './providers.ts';
+import { canonicalTestMuAppReference, isTestMuAppReference } from './providers.ts';
 
 /**
  * TestMu session, upload, and artifact mechanics. Loaded on demand by the provider definition;
@@ -168,13 +168,10 @@ export async function resolveTestMuAppReference(
 
 const TESTMU_APP_SCHEME = 'lt://';
 
-/**
- * The canonical `lt://` reference for `app` (URI schemes are case-insensitive; the hub matches the
- * lower-case spelling), or undefined when `app` does not use the scheme.
- */
+/** The canonical `lt://` reference for `app`, or undefined when `app` does not use the scheme. */
 function parseTestMuAppReference(app: string): string | undefined {
-  if (app.slice(0, TESTMU_APP_SCHEME.length).toLowerCase() !== TESTMU_APP_SCHEME) return undefined;
-  const reference = `${TESTMU_APP_SCHEME}${app.slice(TESTMU_APP_SCHEME.length)}`;
+  const reference = canonicalTestMuAppReference(app);
+  if (!reference.startsWith(TESTMU_APP_SCHEME)) return undefined;
   if (isTestMuAppReference(reference)) return reference;
   throw new AppError('INVALID_ARGS', `TestMu AI --provider-app ${app} is not an lt:// app id.`, {
     providerApp: app,
@@ -221,7 +218,8 @@ export function buildTestMuCapabilities(
 
 /** The upload and app-list APIs answer with a bare app id or an `lt://` reference. */
 export function testMuAppReferenceFromId(id: string): string {
-  return id.startsWith('lt://') ? id : `lt://${id}`;
+  const reference = canonicalTestMuAppReference(id);
+  return reference.startsWith(TESTMU_APP_SCHEME) ? reference : `${TESTMU_APP_SCHEME}${id}`;
 }
 
 async function fetchTestMuSessionDetails(
@@ -261,7 +259,7 @@ function mapTestMuArtifacts(
 ): CloudArtifact[] {
   // Virtual-device sessions report the device log as `console_logs_url`.
   const deviceLogField =
-    typeof details.console_logs_url === 'string' && details.console_logs_url.length > 0
+    typeof details.console_logs_url === 'string' && details.console_logs_url.trim().length > 0
       ? 'console_logs_url'
       : 'device_logs_url';
   const fromDetails = (
@@ -293,7 +291,8 @@ function mapTestMuArtifacts(
 /** The upload answers with `app_url` (`lt://…`) and/or a bare `app_id`; anything else is a failed upload. */
 function readTestMuAppReference(value: unknown): string | undefined {
   const { app_url: appUrl, app_id: appId } = asOptionalRecord(value) ?? {};
-  if (typeof appUrl === 'string' && isTestMuAppReference(appUrl)) return appUrl;
+  const url = typeof appUrl === 'string' ? canonicalTestMuAppReference(appUrl) : undefined;
+  if (url && isTestMuAppReference(url)) return url;
   if (typeof appId !== 'string') return undefined;
   const reference = testMuAppReferenceFromId(appId);
   return isTestMuAppReference(reference) ? reference : undefined;

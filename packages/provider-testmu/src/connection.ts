@@ -6,7 +6,7 @@ import {
   rejectRefusedProviderProfileFields,
   type ProviderProfileFieldDeclaration,
 } from '@agent-device/contracts/provider-profile-fields';
-import { isTestMuAppReference } from './providers.ts';
+import { canonicalTestMuAppReference, isTestMuAppReference } from './providers.ts';
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
 import { readTestMuDeviceFeatureFields, readTestMuDeviceType } from './testmu-device-features.ts';
 
@@ -25,9 +25,10 @@ export function createTestMuConnection(
       required(host.env.LT_ACCESS_KEY, 'LT_ACCESS_KEY');
       if (flags.platform !== 'android' && flags.platform !== 'ios')
         throw host.createError('INVALID_ARGS', 'connect testmu requires --platform ios|android.');
-      let app = required(flags.providerApp, '--provider-app <lt://app-id, URL, or local path>');
-      if (app.slice(0, 5).toLowerCase() === 'lt://') {
-        app = `lt://${app.slice(5)}`;
+      let app = canonicalTestMuAppReference(
+        required(flags.providerApp, '--provider-app <lt://app-id, URL, or local path>'),
+      );
+      if (app.startsWith('lt://')) {
         if (!isTestMuAppReference(app))
           throw host.createError(
             'INVALID_ARGS',
@@ -67,7 +68,7 @@ export function createTestMuConnection(
           platform: flags.platform,
           deviceName: required(flags.device, '--device'),
           osVersion: required(flags.providerOsVersion, '--provider-os-version'),
-          app: required(flags.providerApp, '--provider-app'),
+          app: canonicalTestMuAppReference(required(flags.providerApp, '--provider-app')),
           deviceType: readTestMuDeviceType(flags),
           apiEndpoint: host.env.TESTMU_API_ENDPOINT,
         },

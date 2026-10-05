@@ -317,6 +317,8 @@ test('TestMu upload accepts only an lt:// reference or a valid app id from the r
     [{ app_url: 'lt://APP6' }, 'lt://APP6'],
     [{ app_url: 'https://cdn.example/app.apk', app_id: 'APP5' }, 'lt://APP5'],
     [{ app_id: 'lt://APP7' }, 'lt://APP7'],
+    [{ app_id: 'LT://APP7' }, 'lt://APP7'],
+    [{ app_url: 'Lt://APP6' }, 'lt://APP6'],
     [{ app_url: 'https://cdn.example/app.apk' }, undefined],
     [{ app_url: 'lt://' }, undefined],
     [{ app_id: 'bs://APP8' }, undefined],
@@ -422,18 +424,23 @@ test('TestMu reads the console log as the device log and falls back to device_lo
     ['https://api.test/sessions/SESSION1/log/console'],
   );
 
-  globalThis.fetch = async () =>
-    jsonResponse({
-      status: 'success',
-      data: { device_logs_url: 'https://api.test/sessions/SESSION1/log/device' },
-    });
-  const deviceLog = await listTestMuCloudArtifacts('testmu', 'SESSION1', auth);
-  assert.deepEqual(
-    deviceLog?.cloudArtifacts
-      .filter((artifact) => artifact.kind === 'device-log')
-      .map((artifact) => artifact.url),
-    ['https://api.test/sessions/SESSION1/log/device'],
-  );
+  for (const consoleLogsUrl of [undefined, '  ']) {
+    globalThis.fetch = async () =>
+      jsonResponse({
+        status: 'success',
+        data: {
+          console_logs_url: consoleLogsUrl,
+          device_logs_url: 'https://api.test/sessions/SESSION1/log/device',
+        },
+      });
+    const deviceLog = await listTestMuCloudArtifacts('testmu', 'SESSION1', auth);
+    assert.deepEqual(
+      deviceLog?.cloudArtifacts
+        .filter((artifact) => artifact.kind === 'device-log')
+        .map((artifact) => artifact.url),
+      ['https://api.test/sessions/SESSION1/log/device'],
+    );
+  }
 });
 
 test('TestMu session details read as pending on 404 and fail typed on a body that is not JSON', async () => {
