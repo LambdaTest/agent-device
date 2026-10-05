@@ -32,6 +32,9 @@ Two selection traps recur:
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
+Provider plugin packaging has no CI lane: after changing a `packages/provider-*` package or the
+plugin SDK, run `pnpm build && node scripts/check-provider-plugin.mjs packages/provider-testmu`.
+
 Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
 Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
 failures, or unresolved risks.
