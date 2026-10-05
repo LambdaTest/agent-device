@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { readPluginManifest } from './manifest.ts';
+import { readPluginManifest, RESERVED_PLUGIN_PROVIDERS } from './manifest.ts';
+import { DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS } from '../provider-device-runtimes.ts';
 import { pluginHome, writePlugin } from './plugin.fixtures.ts';
 
 test('manifest compatibility is checked without evaluating plugin code', () => {
@@ -64,4 +65,9 @@ test('connection metadata admits local providers and rejects malformed or remote
   ]) {
     assert.throws(() => read(invalid), { code: 'INVALID_ARGS' });
   }
+});
+
+test('every bundled provider runtime is reserved from plugins', () => {
+  for (const provider of DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS)
+    assert.ok((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider), provider);
 });
