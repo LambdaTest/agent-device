@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -15,8 +14,6 @@ export function createPluginHost(
     createError: (code, message, details) => new AppError(code, message, details),
     apple: Object.freeze({
       archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
-        // zip updates an existing archive in place, so a stale one would keep its old entries.
-        await fs.rm(archivePath, { force: true });
         const args = ['-qr', archivePath, entryName];
         const result = await runCmd('zip', args, { cwd: sourceDirectory, timeoutMs: 120_000 });
         if (result.exitCode !== 0) {
