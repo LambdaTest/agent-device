@@ -19,7 +19,6 @@ function host(env: Record<string, string | undefined>): ProviderPluginHost {
     env,
     options: {},
     clientVersion: '0.0.0-test',
-    apple: {} as ProviderPluginHost['apple'],
     createError: (code, message, details) => new AppError(code, message, details),
   };
 }
