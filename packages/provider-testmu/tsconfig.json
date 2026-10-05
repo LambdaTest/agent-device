@@ -6,7 +6,11 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"],
+      "agent-device/plugins/webdriver": ["./node_modules/agent-device/src/sdk/plugin-webdriver.ts"]
+    }
   },
   "include": ["src"]
 }
