@@ -2,6 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
+import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { providerWebDriver } from '../../provider-webdriver.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -123,7 +124,8 @@ export async function resolveConnectProviderProfile(options: {
   ];
   const profile = adapter
     ? await adapter.resolve(context)
-    : await withPluginConnection(provider, env, async (connection) => {
+    : await withPluginConnection(provider, env, async (connection, profileFields) => {
+        if (profileFields) rejectRefusedProviderProfileFields(context.flags, profileFields);
         const resolved = await connection.resolve(context);
         if (resolved.profile.leaseProvider !== provider)
           throw new AppError(
