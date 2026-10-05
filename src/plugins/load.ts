@@ -82,7 +82,7 @@ async function instantiateProviderPlugin(
         >
   )(host);
   let registration: ProviderPluginRegistration;
-  if (result && typeof result === 'object' && 'webDriver' in result) {
+  if (isWebDriverPluginResult(result)) {
     if (result.webDriver?.provider !== plugin.agentDevicePlugin.provider) {
       throw new AppError(
         'INVALID_ARGS',
@@ -104,6 +104,12 @@ async function instantiateProviderPlugin(
     throw new AppError('INVALID_ARGS', `Plugin must return a provider runtime: ${plugin.name}`);
   }
   return registration;
+}
+
+function isWebDriverPluginResult(
+  result: unknown,
+): result is { webDriver: WebDriverPluginOptions; connection?: PluginConnection } {
+  return typeof result === 'object' && result !== null && 'webDriver' in result;
 }
 
 function validateProviderPlugin(
