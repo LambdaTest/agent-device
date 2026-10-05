@@ -189,13 +189,6 @@ async function releaseLease(
   return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
 }
 
-/**
- * Releases a lease that finished allocating after its requester was gone and
- * turns the outcome into the canceled-request error nobody is left to receive:
- * a throwing provider release is folded into `releaseError` rather than raised,
- * and the provider session counts as released only when it reported no
- * warnings — otherwise the error names what an operator must stop by hand.
- */
 // A run's repeat allocation reuses its live lease; refusing that request must not end the
 // lease, or the provider session the first allocation created is left without an owner.
 // A requester that hung up owns nothing, so its canceled repeat allocation still releases.
@@ -215,6 +208,13 @@ async function settleFailedAllocation(
   }
 }
 
+/**
+ * Releases a lease that finished allocating after its requester was gone and
+ * turns the outcome into the canceled-request error nobody is left to receive:
+ * a throwing provider release is folded into `releaseError` rather than raised,
+ * and the provider session counts as released only when it reported no
+ * warnings — otherwise the error names what an operator must stop by hand.
+ */
 async function releaseAllocationForGoneRequester(
   lease: DeviceLease,
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
