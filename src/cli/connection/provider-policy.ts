@@ -35,11 +35,12 @@ export function connectProviderNamesForError(): string {
 
 export function connectionProviderCapabilities(
   provider: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
 ): ConnectionProviderCapabilities {
   const directDeviceProvider = isDirectDeviceConnectProvider(provider);
   const cloudWebDriver = isCloudWebDriverProviderName(provider);
   if (!directDeviceProvider && provider !== 'cloud' && provider !== 'proxy') {
-    const plugin = pluginConnectionCapabilities(provider);
+    const plugin = pluginConnectionCapabilities(provider, env);
     if (plugin) return plugin;
   }
   return {
