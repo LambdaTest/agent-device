@@ -1,3 +1,5 @@
+// Manual pre-push check for provider plugin packages; no CI lane runs it (it needs pnpm and a
+// built core). Usage: `pnpm build && node scripts/check-provider-plugin.mjs packages/provider-testmu`.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
