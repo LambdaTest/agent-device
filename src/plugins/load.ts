@@ -12,14 +12,11 @@ import {
 import { createPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
 import type { WebDriverPluginOptions } from '../sdk/plugin-webdriver.ts';
-import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 
 type ProviderPluginRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
   platformModule: PlatformRuntimeProviderModule;
   connection?: PluginConnection;
-  /** Known only for `{ webDriver }` plugins; a raw runtime plugin validates its own fields. */
-  profileFields?: ProviderProfileFieldDeclaration;
 }>;
 
 export async function loadProviderPlugins(
@@ -48,17 +45,16 @@ export async function loadProviderPlugins(
 export async function withPluginConnection<T>(
   provider: string,
   env: NodeJS.ProcessEnv,
-  runConnection: (
-    connection: PluginConnection,
-    profileFields: ProviderProfileFieldDeclaration | undefined,
-  ) => Promise<T>,
+  runConnection: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
   const registrations = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS, provider);
   try {
-    const registration = registrations.find((entry) => entry.runtime.provider === provider);
-    if (!registration?.connection)
+    const connection = registrations.find(
+      (entry) => entry.runtime.provider === provider,
+    )?.connection;
+    if (!connection)
       throw new AppError('INVALID_ARGS', `Plugin does not register connect: ${provider}`);
-    return await runConnection(registration.connection, registration.profileFields);
+    return await runConnection(connection);
   } finally {
     await Promise.allSettled(registrations.map(async ({ runtime }) => await runtime.shutdown()));
   }
@@ -102,7 +98,6 @@ async function instantiateProviderPlugin(
       runtime,
       platformModule: runtime.platformRuntimeModule,
       connection: result.connection,
-      profileFields: result.webDriver.profileFields,
     };
   } else registration = result;
   if (!registration?.runtime || typeof registration.runtime.shutdown !== 'function') {
