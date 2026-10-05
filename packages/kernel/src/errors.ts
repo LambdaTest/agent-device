@@ -42,7 +42,9 @@ export class AppError extends Error {
   static [Symbol.hasInstance](value: unknown): boolean {
     if (this !== AppError) return Function.prototype[Symbol.hasInstance].call(this, value);
     return (
-      value instanceof Error && (value as Error & Record<symbol, unknown>)[APP_ERROR_BRAND] === true
+      typeof value === 'object' &&
+      value !== null &&
+      (value as Record<symbol, unknown>)[APP_ERROR_BRAND] === true
     );
   }
 
