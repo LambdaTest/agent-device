@@ -620,7 +620,7 @@ Cloud profile flow:
 
 TestMu AI virtual-device flow (emulators and simulators):
   agent-device plugins add @agent-device/testmu
-  LT_USERNAME=... LT_ACCESS_KEY=...
+  export LT_USERNAME=... LT_ACCESS_KEY=...
   agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-version 18.0 --provider-app lt://APP-id
   agent-device open com.example.app
   agent-device snapshot -i

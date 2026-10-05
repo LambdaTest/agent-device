@@ -205,9 +205,11 @@ agent-device artifacts <webdriver-session-id> --provider testmu --json
 The TestMu AI session id is the WebDriver session id. If artifact lookup is pending immediately
 after `close`, retry it; TestMu AI finalizes video and log URLs after the session ends.
 
-Endpoints can be redirected for a staging or private TestMu AI deployment with
-`TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual devices),
-`TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_API_ENDPOINT`.
+WebDriver, upload, and catalog/session-detail endpoints can be redirected for a staging or private
+TestMu AI deployment with `TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual
+devices), `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_API_ENDPOINT`. The
+app listing `connect` uses to check credentials stays fixed at
+`https://manual-api.lambdatest.com/app/data`.
 
 On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If
 it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target, or
