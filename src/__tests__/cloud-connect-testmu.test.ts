@@ -337,29 +337,16 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
   }
 });
 
-test('connect limrun refuses profile fields Limrun does not read', async () => {
+test('connect limrun refuses the device type', async () => {
   const result = await runCliCapture(
-    [
-      'connect',
-      'limrun',
-      '--platform',
-      'ios',
-      '--provider-device-type',
-      'real',
-      '--provider-os-version',
-      '18',
-      '--json',
-    ],
+    ['connect', 'limrun', '--platform', 'ios', '--provider-device-type', 'real', '--json'],
     {
       env: { LIMRUN_API_KEY: 'lim_test_key' },
       stateDirPrefix: 'agent-device-connect-limrun-device-type-',
     },
   );
   assert.equal(result.code, 1);
-  assert.match(
-    result.stdout,
-    /--provider-os-version, --provider-device-type are not supported by Limrun/,
-  );
+  assert.match(result.stdout, /--provider-device-type is not supported by Limrun/);
 });
 
 function readGeneratedConfig(configPath: string): {
