@@ -61,6 +61,10 @@
     // @agent-device/provider-limrun owns the source import, while the published
     // root build externalizes @limrun/api and retains runtime imports in packed chunks.
     "@limrun/api",
+    // @agent-device/testmu imports agent-device type-only, and its tsconfig maps those specifiers
+    // through this workspace link to core source so typecheck needs no build; Fallow then credits
+    // the source files rather than the package.
+    "agent-device",
     // Oxlint resolves the shared config's JS plugins dynamically from their package names.
     "@nkzw/eslint-plugin",
     "eslint-plugin-no-only-tests",
