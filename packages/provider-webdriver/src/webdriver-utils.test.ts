@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, test, vi } from 'vitest';
+import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { asOptionalRecord } from '@agent-device/kernel/record';
 import {
@@ -18,7 +17,6 @@ import {
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const realFetch = globalThis.fetch;
-const execFileAsync = promisify(execFile);
 
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -214,7 +212,7 @@ test.skipIf(process.platform === 'win32')(
     const tempDir = await mkdtempForTest('agent-device-upload-form-fifo-');
     try {
       const fifoPath = path.join(tempDir, 'App.ipa');
-      await execFileAsync('mkfifo', [fifoPath]);
+      await runCmd('mkfifo', [fifoPath]);
 
       await assert.rejects(
         appFileUploadForm(fifoPath, 'file', { provider: 'hub', service: 'Hub' }),
