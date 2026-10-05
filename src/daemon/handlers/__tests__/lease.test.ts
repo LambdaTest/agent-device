@@ -6,7 +6,11 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import {
   HUMAN_CONTROL_LEASE_REQUEST,
   HUMAN_CONTROL_SCOPE,
@@ -49,6 +53,65 @@ for (const operation of ['allocate', 'release'] as const) {
     assert.equal(active, true);
   });
 }
+
+test('lease_release still releases a retainOnClose lease through the provider', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    retainOnClose: true,
+  });
+  const released: DeviceLease[] = [];
+  const request: DaemonRequest = {
+    token: 'test-token',
+    session: 'default',
+    command: 'lease_release',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: lease.leaseId, clientId: 'client-a' },
+  };
+
+  const response = await handleLeaseCommands({
+    req: request,
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-retained-release-'),
+    leaseRegistry: registry,
+    leaseLifecycleProvider: {
+      release: async (active) => {
+        released.push(active);
+        return { providerSessionId: 'provider-1' };
+      },
+    },
+  });
+
+  assert.equal(response?.ok, true);
+  assert.deepEqual(
+    released.map((active) => active.leaseId),
+    [lease.leaseId],
+  );
+  assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('lease_allocate stores retainOnClose from the request meta', async () => {
+  const registry = new LeaseRegistry();
+  const request: DaemonRequest = {
+    token: 'test-token',
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', runId: 'run-1', leaseRetainOnClose: true },
+  };
+
+  const response = await handleLeaseCommands({
+    req: request,
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-retained-allocate-'),
+    leaseRegistry: registry,
+  });
+
+  assert.equal(response?.ok, true);
+  assert.equal(registry.listActiveLeases()[0]?.retainOnClose, true);
+});
 
 test('activation drains canceled provider allocation and its release cleanup', async () => {
   const registry = new LeaseRegistry();
@@ -192,7 +255,7 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
         allocate: async () => {
           calls += 1;
           if (calls === 1) return { providerSessionId: 'session-1' };
-          throw new AppError('INVALID_ARGS', '--provider-device-type is not supported by Cloud.');
+          throw new AppError('INVALID_ARGS', '--provider-os-version is not supported by Cloud.');
         },
       },
     });
@@ -200,7 +263,7 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
   const first = await allocate(allocateRequest());
   const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
   const repeat = allocateRequest();
-  repeat.flags = { providerDeviceType: 'real' };
+  repeat.flags = { providerOsVersion: '18.0' };
   await assert.rejects(
     allocate(repeat),
     (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
@@ -210,17 +273,59 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
     registry.listActiveLeases().map((entry) => entry.leaseId),
     [lease.leaseId],
   );
-  assert.deepEqual(
+  assert.equal(
     registry.resolveProviderSession({
-      provider: 'cloud',
+      provider: lease.leaseProvider,
       providerSessionId: 'session-1',
-      tenantId: 'tenant-a',
-    }),
-    {
-      provider: 'cloud',
-      providerSessionId: 'session-1',
-      leaseId: lease.leaseId,
-      tenantId: 'tenant-a',
-    },
+      tenantId: lease.tenantId,
+    })?.leaseId,
+    lease.leaseId,
   );
+});
+
+// A requester that hangs up during its repeat allocation will never release the lease it reused, so
+// the provider rejecting with the cancellation must release that lease and its session.
+test('a repeat allocation canceled by its requester releases the reused lease', async () => {
+  const registry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-canceled-repeat-');
+  const requestId = 'canceled-repeat-allocation';
+  const releasedSessions: unknown[] = [];
+  let calls = 0;
+  const allocate = async (req: DaemonRequest) =>
+    await handleLeaseCommands({
+      req,
+      sessionName: 'lease-ttl-test',
+      sessionStore,
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        allocate: async (_lease, context) => {
+          calls += 1;
+          if (calls === 1) return { providerSessionId: 'session-1' };
+          markRequestCanceled(requestId);
+          context?.signal?.throwIfAborted();
+          throw new Error('the request signal was not aborted');
+        },
+        release: async (released) => {
+          releasedSessions.push(released.leaseId);
+          return { providerSessionId: 'session-1' };
+        },
+      },
+    });
+
+  const first = await allocate(allocateRequest());
+  const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
+  const repeat = allocateRequest();
+  repeat.meta = { ...repeat.meta, requestId };
+  const registration = registerRequestAbort(requestId);
+  try {
+    await assert.rejects(
+      allocate(repeat),
+      (error: unknown) => error instanceof AppError && error.details?.released === true,
+    );
+  } finally {
+    clearRequestCanceled(requestId, registration);
+  }
+  assert.equal(calls, 2);
+  assert.deepEqual(releasedSessions, [lease.leaseId]);
+  assert.deepEqual(registry.listActiveLeases(), []);
 });

@@ -56,14 +56,6 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   AWS_DEVICE_FARM_APP_ARN?: string;
 };
 
-const AWS_DEVICE_FARM_FIELDS_REFUSED = {
-  awsProjectArn: 'refused',
-  awsDeviceArn: 'refused',
-  awsAppArn: 'refused',
-  awsRegion: 'refused',
-  awsInteractionMode: 'refused',
-} as const;
-
 const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
   label: 'BrowserStack',
@@ -83,7 +75,11 @@ const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
     providerNetworkProfile: 'consumed',
     providerCustomNetwork: 'consumed',
     providerNoResignApp: 'consumed',
-    ...AWS_DEVICE_FARM_FIELDS_REFUSED,
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
   },
 };
 

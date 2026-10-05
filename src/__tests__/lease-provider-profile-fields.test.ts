@@ -63,26 +63,23 @@ function limrunDaemon(): (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonRe
   };
 }
 
-test('leases.allocate refuses a real device from Limrun instead of handing out a simulator', async () => {
+test('leases.allocate refuses an OS version Limrun cannot honour instead of ignoring it', async () => {
   const setup = createTransport(limrunDaemon());
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
 
   await assert.rejects(
     client.leases.allocate({
       tenant: 'limrun',
-      runId: 'run-real',
+      runId: 'run-os-version',
       leaseBackend: 'ios-instance',
       leaseProvider: 'limrun',
       platform: 'ios',
-      providerDeviceType: 'real',
+      providerOsVersion: '18.0',
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'INVALID_ARGS');
-      assert.equal(error.details?.provider, 'limrun');
-      assert.deepEqual(error.details?.flags, ['--provider-device-type']);
-      return true;
-    },
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
   );
   assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
 });
@@ -91,7 +88,7 @@ test('a remote-config profile cannot carry a field Limrun refuses past lease all
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
   const remoteConfig = path.join(project, 'limrun.remote.json');
-  fs.writeFileSync(remoteConfig, JSON.stringify({ providerDeviceType: 'real' }), 'utf8');
+  fs.writeFileSync(remoteConfig, JSON.stringify({ providerGeoLocation: 'US' }), 'utf8');
   const now = new Date().toISOString();
   writeRemoteConnectionState({
     stateDir,
@@ -120,8 +117,10 @@ test('a remote-config profile cannot carry a field Limrun refuses past lease all
 
     assert.equal(result.code, 1);
     assert.equal(result.calls[0]?.command, 'lease_allocate');
-    assert.equal(result.calls[0]?.flags?.providerDeviceType, 'real');
-    assert.match(result.stdout, /--provider-device-type is not supported by Limrun/);
+    assert.equal(result.calls[0]?.flags?.providerGeoLocation, 'US');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.error.code, 'INVALID_ARGS');
+    assert.deepEqual(payload.error.details.flags, ['--provider-geo-location']);
     assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

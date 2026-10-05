@@ -5,11 +5,10 @@ import { CLOUD_WEBDRIVER_PROFILE_FIELDS } from './provider-definitions.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { BROWSERSTACK_DEVICE_FEATURE_SPECS } from './browserstack-device-features.ts';
 
-// Fields a hub reads directly while building its session, outside the device-feature tables.
+// Fields a hub reads directly while building its session, outside the device-feature table.
 const HUB_SESSION_FIELDS: readonly ProviderProfileField[] = [
   'providerApp',
   'providerOsVersion',
-  'providerDeviceType',
   'providerProject',
   'providerBuild',
   'providerSessionName',
@@ -29,13 +28,10 @@ test('every declaration names the provider it is registered under', () => {
 });
 
 // A consumed device feature with no capability row would be accepted and then dropped at the hub.
-test('hub declarations consume exactly the fields their capability builders read', () => {
+test('BrowserStack consumes exactly the fields its capability builder reads', () => {
   assert.deepEqual(
     consumedFields(CLOUD_WEBDRIVER_PROVIDERS.browserStack),
-    [
-      ...HUB_SESSION_FIELDS.filter((field) => field !== 'providerDeviceType'),
-      ...BROWSERSTACK_DEVICE_FEATURE_SPECS.map((spec) => spec.field),
-    ].sort(),
+    [...HUB_SESSION_FIELDS, ...BROWSERSTACK_DEVICE_FEATURE_SPECS.map((spec) => spec.field)].sort(),
   );
 });
 

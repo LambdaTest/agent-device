@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   createProviderWebDriver,
@@ -175,10 +176,12 @@ test('AWS Device Farm facade rejects device features it does not read at session
             },
           }),
         (error: unknown) => {
-          assert.match(
-            (error as Error).message,
-            /--provider-device-orientation, --provider-network-profile are not supported by AWS Device Farm/,
-          );
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.deepEqual(error.details?.flags, [
+            '--provider-device-orientation',
+            '--provider-network-profile',
+          ]);
           return true;
         },
       );
@@ -319,37 +322,6 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
   });
 }, 15_000);
 
-test('BrowserStack facade rejects the device type at session preparation', async () => {
-  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: unexpectedHostCommand,
-    });
-    const runtime = runtimeFor(
-      provider.createDefaultRuntimes({
-        BROWSERSTACK_USERNAME: 'user',
-        BROWSERSTACK_ACCESS_KEY: 'key',
-        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-      }),
-      CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    );
-    const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
-    const context = browserStackContext(lease);
-    try {
-      await assert.rejects(
-        async () =>
-          await runtime.leaseLifecycle.allocate?.(lease, {
-            flags: { ...context.flags, providerDeviceType: 'real' },
-          }),
-        /--provider-device-type is not supported by BrowserStack/,
-      );
-      assert.deepEqual(server.calls, []);
-    } finally {
-      await runtime.shutdown();
-    }
-  });
-}, 15_000);
-
 test('BrowserStack refuses a refused field on a repeat allocation of its live lease', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const provider = createProviderWebDriver({
@@ -372,9 +344,15 @@ test('BrowserStack refuses a refused field on a repeat allocation of its live le
       await assert.rejects(
         async () =>
           await runtime.leaseLifecycle.allocate?.(lease, {
-            flags: { ...context.flags, providerDeviceType: 'real' },
+            flags: {
+              ...context.flags,
+              awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
+            },
           }),
-        /--provider-device-type is not supported by BrowserStack/,
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          JSON.stringify(error.details?.flags) === '["--aws-project-arn"]',
       );
       assert.equal(server.calls.length, sessionCalls);
       assert.deepEqual(await runtime.leaseLifecycle.heartbeat?.(lease), {

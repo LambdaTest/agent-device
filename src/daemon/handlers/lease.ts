@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
+import { leaseReleaseRequestFor, type ReleaseLeaseRequest } from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
   isProxyLeaseScope,
@@ -74,8 +74,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
       );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
-      // A run's repeat allocation reuses its live lease; refusing that request must not end the
-      // lease, or the provider session the first allocation created is left without an owner.
       const reused = activeLeaseIds.has(lease.leaseId);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
@@ -93,7 +91,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          if (!reused) leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+          await settleFailedAllocation(
+            lease,
+            reused,
+            requestId,
+            leaseLifecycleProvider,
+            leaseRegistry,
+          );
           throw error;
         } finally {
           work?.release();
@@ -153,18 +157,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
   }
 }
 
-function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
-  return leaseScopeToReleaseRequest({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.backend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
-}
-
 type LeaseReleaseOutcome = {
   /** The daemon's own lease record was released (bookkeeping, not the billed resource). */
   registryReleased: boolean;
@@ -183,6 +175,25 @@ async function releaseLease(
   const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
   if (lease) recordProviderSession(leaseRegistry, lease, provider);
   return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
+}
+
+// A run's repeat allocation reuses its live lease; refusing that request must not end the
+// lease, or the provider session the first allocation created is left without an owner.
+// A requester that hung up owns nothing, so its canceled repeat allocation still releases.
+async function settleFailedAllocation(
+  lease: DeviceLease,
+  reused: boolean,
+  requestId: string | undefined,
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  leaseRegistry: LeaseRegistry,
+): Promise<void> {
+  if (!reused) {
+    leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+    return;
+  }
+  if (isRequestCanceled(requestId)) {
+    throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
+  }
 }
 
 /**

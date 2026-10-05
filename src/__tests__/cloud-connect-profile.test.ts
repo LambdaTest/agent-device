@@ -837,8 +837,7 @@ test('connect aws-device-farm rejects device-feature flags it does not read', ()
         assert.equal(error.code, 'INVALID_ARGS');
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
-        assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /are not supported by AWS Device Farm/);
+        assert.equal(error.details?.provider, 'aws-device-farm');
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',
