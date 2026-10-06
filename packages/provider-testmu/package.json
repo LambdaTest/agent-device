@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/testmu",
-  "version": "0.1.0",
+  "version": "0.21.22",
   "type": "module",
   "description": "TestMu AI real and virtual mobile device plugin for agent-device.",
   "files": [
@@ -50,6 +50,14 @@
       ".": {
         "import": "./dist/plugin.mjs"
       }
-    }
-  }
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-testmu"
+  },
+  "homepage": "https://agent-device.dev/docs/testmu"
 }
