@@ -73,42 +73,45 @@ export function readPluginManifest(directory: string): PluginManifest {
     });
   }
   resolvePluginEntry(directory, declaration.entry);
-  if (declaration.connection !== undefined) {
-    const policy = declaration.connection;
-    if (
-      !policy ||
-      typeof policy !== 'object' ||
-      policy.leaseKind !== 'direct-device-provider' ||
-      [
-        'requiresAppAttachment',
-        'requiresRemoteDaemon',
-        'supportsArtifacts',
-        'supportsDeferredAppSelection',
-        'supportsDirectPortReverse',
-        'usesCloudWebDriverLease',
-      ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
-      policy.requiresRemoteDaemon
-    ) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Plugin connection must declare local provider capabilities',
-      );
-    }
-  }
-  const credentialVariables: unknown = declaration.credentialVariables;
+  assertLocalConnectionPolicy(declaration.connection);
+  assertCredentialVariables(declaration.credentialVariables);
+  return manifest as PluginManifest;
+}
+
+function assertLocalConnectionPolicy(policy: ConnectionProviderCapabilities | undefined): void {
+  if (policy === undefined) return;
   if (
-    credentialVariables !== undefined &&
-    (!Array.isArray(credentialVariables) ||
-      !credentialVariables.every(
-        (name) => typeof name === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(name),
-      ))
+    !policy ||
+    typeof policy !== 'object' ||
+    policy.leaseKind !== 'direct-device-provider' ||
+    [
+      'requiresAppAttachment',
+      'requiresRemoteDaemon',
+      'supportsArtifacts',
+      'supportsDeferredAppSelection',
+      'supportsDirectPortReverse',
+      'usesCloudWebDriverLease',
+    ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+    policy.requiresRemoteDaemon
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Plugin connection must declare local provider capabilities',
+    );
+  }
+}
+
+function assertCredentialVariables(variables: unknown): void {
+  if (
+    variables !== undefined &&
+    (!Array.isArray(variables) ||
+      !variables.every((name) => typeof name === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(name)))
   ) {
     throw new AppError(
       'INVALID_ARGS',
       'Plugin credentialVariables must list environment variable names',
     );
   }
-  return manifest as PluginManifest;
 }
 
 export function resolvePluginEntry(directory: string, entry: string): string {

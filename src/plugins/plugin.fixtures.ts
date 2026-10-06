@@ -46,7 +46,11 @@ export function selectPlugin(
 /** Installs `manifest` as-is, with an entry file that throws if evaluated. */
 export function selectPluginManifest(
   home: string,
-  manifest: { name: string; agentDevicePlugin: Record<string, unknown> & { entry: string } },
+  manifest: {
+    name: string;
+    version: string;
+    agentDevicePlugin: Record<string, unknown> & { entry: string };
+  },
 ) {
   const installation = crypto.randomUUID();
   const directory = path.join(home, 'plugins', installation, 'node_modules', manifest.name);
