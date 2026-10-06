@@ -151,8 +151,11 @@ provider `connect` commands.
 The typed client reaches TestMu AI through a lease. Allocate one with the provider selectors, then
 scope a client to it for normal commands. `sessions.close()` ends the hosted session and releases
 the lease; `leases.release()` in `finally` is then a no-op, and still releases the lease when a
-command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment. Add
-`providerDeviceType: 'real'` to `leases.allocate` to run on a real device.
+command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment and
+keeps the values it started with. If your shell holds different ones, the first command that
+allocates a lease, such as `open`, refuses before it creates a session; run
+`agent-device daemon stop` (with the same `--state-dir`) and rerun the command. A shell that sets
+neither variable uses the daemon's. Add `providerDeviceType: 'real'` to `leases.allocate` to run on a real device.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';

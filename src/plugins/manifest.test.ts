@@ -67,6 +67,25 @@ test('connection metadata admits local providers and rejects malformed or remote
   }
 });
 
+test('credential variables are optional environment variable names', () => {
+  const { home } = pluginHome();
+  const directory = writePlugin(home);
+  const file = path.join(directory, 'package.json');
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const read = (credentialVariables: unknown) => {
+    manifest.agentDevicePlugin.credentialVariables = credentialVariables;
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    return readPluginManifest(directory);
+  };
+  assert.equal(read(undefined).agentDevicePlugin.credentialVariables, undefined);
+  assert.deepEqual(read(['EXAMPLE_USER', '_KEY_2']).agentDevicePlugin.credentialVariables, [
+    'EXAMPLE_USER',
+    '_KEY_2',
+  ]);
+  for (const invalid of [null, 'EXAMPLE_USER', {}, [''], ['example_user'], ['2KEY'], ['A-B'], [1]])
+    assert.throws(() => read(invalid), { code: 'INVALID_ARGS' }, JSON.stringify(invalid));
+});
+
 test('every bundled provider runtime is reserved from plugins', () => {
   for (const provider of DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS)
     assert.ok((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider), provider);

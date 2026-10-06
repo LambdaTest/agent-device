@@ -25,6 +25,7 @@ type PluginManifest = {
     provider: string;
     entry: string;
     connection?: ConnectionProviderCapabilities;
+    credentialVariables?: string[];
   };
 };
 
@@ -93,6 +94,19 @@ export function readPluginManifest(directory: string): PluginManifest {
         'Plugin connection must declare local provider capabilities',
       );
     }
+  }
+  const credentialVariables: unknown = declaration.credentialVariables;
+  if (
+    credentialVariables !== undefined &&
+    (!Array.isArray(credentialVariables) ||
+      !credentialVariables.every(
+        (name) => typeof name === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(name),
+      ))
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Plugin credentialVariables must list environment variable names',
+    );
   }
   return manifest as PluginManifest;
 }

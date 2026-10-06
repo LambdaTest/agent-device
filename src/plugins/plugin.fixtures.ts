@@ -40,6 +40,24 @@ export function selectPlugin(
 ) {
   const installation = crypto.randomUUID();
   writePlugin(path.join(home, 'plugins', installation), name, apiVersion, provider, source);
+  recordSelection(home, name, installation);
+}
+
+/** Installs `manifest` as-is, with an entry file that throws if evaluated. */
+export function selectPluginManifest(
+  home: string,
+  manifest: { name: string; agentDevicePlugin: Record<string, unknown> & { entry: string } },
+) {
+  const installation = crypto.randomUUID();
+  const directory = path.join(home, 'plugins', installation, 'node_modules', manifest.name);
+  const entry = path.join(directory, manifest.agentDevicePlugin.entry);
+  fs.mkdirSync(path.dirname(entry), { recursive: true });
+  fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify(manifest));
+  fs.writeFileSync(entry, 'throw new Error("evaluated");');
+  recordSelection(home, manifest.name, installation);
+}
+
+function recordSelection(home: string, name: string, installation: string) {
   const configPath = path.join(home, 'config.json');
   const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
   config.plugins ??= {};

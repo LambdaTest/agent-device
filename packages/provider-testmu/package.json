@@ -39,7 +39,11 @@
       "supportsDeferredAppSelection": false,
       "supportsDirectPortReverse": false,
       "usesCloudWebDriverLease": true
-    }
+    },
+    "credentialVariables": [
+      "LT_USERNAME",
+      "LT_ACCESS_KEY"
+    ]
   },
   "publishConfig": {
     "exports": {
